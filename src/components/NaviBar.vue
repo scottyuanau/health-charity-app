@@ -12,6 +12,10 @@ const menuItems = [
   {
     label: 'About',
     command: () => router.push({ name: 'about' })
+  },
+  {
+    label: 'Sign In',
+    command: () => router.push({ name: 'login' })
   }
 ]
 </script>
