@@ -89,4 +89,12 @@ const menuItems = computed(() => {
   </nav>
 </template>
 
-<style scoped></style>
+<style scoped>
+:deep(.p-menubar) {
+  width: 100%;
+}
+
+:deep(.p-menubar-root-list) {
+  margin-left: auto;
+}
+</style>
