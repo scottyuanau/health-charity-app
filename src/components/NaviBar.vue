@@ -7,6 +7,21 @@ import { computed } from 'vue'
 const router = useRouter()
 const { state, logout, isAuthenticated: authStatus } = useAuth()
 const isAuthenticated = computed(() => authStatus.value)
+const displayName = computed(() => {
+  const user = state.user
+  if (!user) return 'Guest'
+
+  if (user.username) return user.username
+
+  const email = user.email?.trim()
+  if (email) {
+    const [namePart] = email.split('@')
+    if (namePart) return namePart
+    return email
+  }
+
+  return 'Guest'
+})
 
 const menuItems = [
   {
@@ -46,7 +61,7 @@ const handleLogout = () => {
       </MenuBar>
       <div class="d-flex align-items-center gap-2 auth-controls">
           <span v-if="isAuthenticated" class="text-muted small">
-            Signed in as <strong>{{ state.user?.username }}</strong>
+            Signed in as <strong>{{ displayName }}</strong>
           </span>
         <button v-if="isAuthenticated" class="btn btn-outline-secondary btn-sm" @click="handleLogout">
           Logout

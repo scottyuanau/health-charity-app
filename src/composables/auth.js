@@ -21,6 +21,22 @@ function login(username, password) {
   return false
 }
 
+function deriveUsernameFromFirebase(user) {
+  if (!user) return 'Firebase user'
+
+  const displayName = user.displayName?.trim()
+  if (displayName) return displayName
+
+  const email = user.email?.trim()
+  if (email) {
+    const [namePart] = email.split('@')
+    if (namePart) return namePart
+    return email
+  }
+
+  return 'Firebase user'
+}
+
 function loginWithFirebase(user) {
   if (!user) {
     state.user = null
@@ -28,7 +44,7 @@ function loginWithFirebase(user) {
   }
 
   state.user = {
-    username: user.displayName || user.email || 'Firebase user',
+    username: deriveUsernameFromFirebase(user),
     email: user.email || null,
     uid: user.uid,
     provider: 'firebase',

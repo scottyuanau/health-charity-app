@@ -7,7 +7,21 @@ import { useAuth } from '@/composables/auth'
 
 const { state } = useAuth()
 
-const username = computed(() => state.user?.username || 'Guest')
+const username = computed(() => {
+  const user = state.user
+  if (!user) return 'Guest'
+
+  if (user.username) return user.username
+
+  const email = user.email?.trim()
+  if (email) {
+    const [namePart] = email.split('@')
+    if (namePart) return namePart
+    return email
+  }
+
+  return 'Guest'
+})
 </script>
 
 <template>
