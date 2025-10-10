@@ -17,6 +17,10 @@ const menuItems = [
     label: 'About',
     command: () => router.push({ name: 'about' })
   },
+  {
+    label:'Dashboard',
+    command: () => router.push({ name: 'dashboard' })
+  }
 ]
 
 const handleLogout = () => {
