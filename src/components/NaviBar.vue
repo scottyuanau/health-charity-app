@@ -23,6 +23,13 @@ const displayName = computed(() => {
   return 'Guest'
 })
 
+const handleLogout = () => {
+  logout()
+  if (router.currentRoute.value.meta.requiresAuth) {
+    router.push({ name: 'home' })
+  }
+}
+
 const menuItems = computed(() => {
   const items = [
     {
@@ -40,17 +47,29 @@ const menuItems = computed(() => {
       label: 'Dashboard',
       command: () => router.push({ name: 'dashboard' }),
     })
+
+    items.push({
+      label: 'Account',
+      items: [
+        {
+          label: `Signed in as ${displayName.value}`,
+          disabled: true,
+        },
+        {
+          label: 'Logout',
+          command: handleLogout,
+        },
+      ],
+    })
+  } else {
+    items.push({
+      label: 'Login',
+      command: () => router.push({ name: 'login' }),
+    })
   }
 
   return items
 })
-
-const handleLogout = () => {
-  logout()
-  if (router.currentRoute.value.meta.requiresAuth) {
-    router.push({ name: 'home' })
-  }
-}
 </script>
 
 <template>
@@ -66,17 +85,6 @@ const handleLogout = () => {
           </RouterLink>
         </template>
       </MenuBar>
-      <div class="d-flex align-items-center gap-2 auth-controls">
-          <span v-if="isAuthenticated" class="text-muted small">
-            Signed in as <strong>{{ displayName }}</strong>
-          </span>
-        <button v-if="isAuthenticated" class="btn btn-outline-secondary btn-sm" @click="handleLogout">
-          Logout
-        </button>
-        <template v-else>
-          <router-link to="/login" class="btn btn-primary btn-sm">Login</router-link>
-        </template>
-      </div>
     </div>
   </nav>
 </template>
