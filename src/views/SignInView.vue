@@ -4,7 +4,7 @@
       <div class="col-12 col-lg-8 col-xxl-6">
         <div class="card shadow-sm">
           <div class="card-body p-4">
-            <h1 class="h3 mb-3 text-center">Firebase Sign In</h1>
+            <h1 class="h3 mb-3 text-center">Sign In</h1>
 
             <Message
               v-if="missingConfigMessage"
@@ -32,7 +32,7 @@
                 <div class="mb-3">
                   <label for="login-email" class="form-label">Email address</label>
                   <Field name="email" :rules="loginEmailRules" v-slot="{ value, handleChange, handleBlur, errorMessage }">
-                    <div>
+                    <div class="field-wrapper">
                       <InputText
                         id="login-email"
                         type="email"
@@ -41,7 +41,7 @@
                         @update:model-value="handleChange"
                         @blur="handleBlur"
                       />
-                      <span class="text-danger" v-if="errorMessage">{{ errorMessage }}</span>
+                      <span class="text-danger field-error" v-if="errorMessage">{{ errorMessage }}</span>
                     </div>
                   </Field>
                 </div>
@@ -49,7 +49,7 @@
                 <div class="mb-4">
                   <label for="login-password" class="form-label">Password</label>
                   <Field name="password" :rules="loginPasswordRules" v-slot="{ value, handleChange, handleBlur, errorMessage }">
-                    <div>
+                    <div class="field-wrapper">
                       <Password
                         id="login-password"
                         toggleMask
@@ -59,7 +59,7 @@
                         @update:model-value="handleChange"
                         @blur="handleBlur"
                       />
-                      <span class="text-danger" v-if="errorMessage">{{ errorMessage }}</span>
+                      <span class="text-danger field-error" v-if="errorMessage">{{ errorMessage }}</span>
                     </div>
                   </Field>
                 </div>
@@ -84,7 +84,7 @@
                   <div class="col-12 col-md-6">
                     <label for="register-username" class="form-label">Username</label>
                     <Field name="username" :rules="usernameRules" v-slot="{ value, handleChange, handleBlur, errorMessage }">
-                      <div>
+                      <div class="field-wrapper">
                         <InputText
                           id="register-username"
                           autocomplete="username"
@@ -92,7 +92,7 @@
                           @update:model-value="handleChange"
                           @blur="handleBlur"
                         />
-                        <span class="text-danger" v-if="errorMessage">{{ errorMessage }}</span>
+                        <span class="text-danger field-error" v-if="errorMessage">{{ errorMessage }}</span>
                       </div>
                     </Field>
                   </div>
@@ -100,7 +100,7 @@
                   <div class="col-12 col-md-6">
                     <label for="register-email" class="form-label">Email address</label>
                     <Field name="email" :rules="emailRules" v-slot="{ value, handleChange, handleBlur, errorMessage }">
-                      <div>
+                      <div class="field-wrapper">
                         <InputText
                           id="register-email"
                           type="email"
@@ -109,7 +109,7 @@
                           @update:model-value="handleChange"
                           @blur="handleBlur"
                         />
-                        <span class="text-danger" v-if="errorMessage">{{ errorMessage }}</span>
+                        <span class="text-danger field-error" v-if="errorMessage">{{ errorMessage }}</span>
                       </div>
                     </Field>
                   </div>
@@ -117,7 +117,7 @@
                   <div class="col-12 col-md-6">
                     <label for="register-password" class="form-label">Password</label>
                     <Field name="password" :rules="passwordRules" v-slot="{ value, handleChange, handleBlur, errorMessage }">
-                      <div>
+                      <div class="field-wrapper">
                         <Password
                           id="register-password"
                           toggleMask
@@ -127,16 +127,16 @@
                           @update:model-value="handleChange"
                           @blur="handleBlur"
                         />
-                        <span class="text-danger" v-if="errorMessage">{{ errorMessage }}</span>
+                        <span class="text-danger field-error" v-if="errorMessage">{{ errorMessage }}</span>
                       </div>
                     </Field>
-                    <small class="text-muted d-block">At least 8 characters, 1 uppercase, 1 lowercase, 1 number.</small>
+
                   </div>
 
                   <div class="col-12 col-md-6">
                     <label for="register-confirm-password" class="form-label">Confirm password</label>
                     <Field name="confirmPassword" :rules="confirmPasswordRules" v-slot="{ value, handleChange, handleBlur, errorMessage }">
-                      <div>
+                      <div class="field-wrapper">
                         <Password
                           id="register-confirm-password"
                           toggleMask
@@ -146,7 +146,7 @@
                           @update:model-value="handleChange"
                           @blur="handleBlur"
                         />
-                        <span class="text-danger" v-if="errorMessage">{{ errorMessage }}</span>
+                        <span class="text-danger field-error" v-if="errorMessage">{{ errorMessage }}</span>
                       </div>
                     </Field>
                   </div>
@@ -154,7 +154,7 @@
                   <div class="col-12 col-md-6">
                     <label for="register-dob" class="form-label">Date of birth</label>
                     <Field name="dateOfBirth" :rules="dateOfBirthRules" v-slot="{ value, handleChange, handleBlur, errorMessage }">
-                      <div>
+                      <div class="field-wrapper">
                         <DatePicker
                           id="register-dob"
                           showIcon
@@ -164,7 +164,7 @@
                           @update:model-value="handleChange"
                           @blur="handleBlur"
                         />
-                        <span class="text-danger" v-if="errorMessage">{{ errorMessage }}</span>
+                        <span class="text-danger field-error" v-if="errorMessage">{{ errorMessage }}</span>
                       </div>
                     </Field>
                   </div>
@@ -172,7 +172,7 @@
                   <div class="col-12 col-md-6">
                     <label for="register-address" class="form-label">Address</label>
                     <Field name="address" :rules="addressRules" v-slot="{ value, handleChange, handleBlur, errorMessage }">
-                      <div>
+                      <div class="field-wrapper">
                         <InputText
                           id="register-address"
                           autocomplete="street-address"
@@ -180,7 +180,7 @@
                           @update:model-value="handleChange"
                           @blur="handleBlur"
                         />
-                        <span class="text-danger" v-if="errorMessage">{{ errorMessage }}</span>
+                        <span class="text-danger field-error" v-if="errorMessage">{{ errorMessage }}</span>
                       </div>
                     </Field>
                   </div>
@@ -188,7 +188,7 @@
                   <div class="col-12">
                     <label for="register-roles" class="form-label">User roles</label>
                     <Field name="roles" :rules="roleRules" :initial-value="[]" v-slot="{ value, handleChange, handleBlur, errorMessage }">
-                      <div>
+                      <div class="field-wrapper">
                         <MultiSelect
                           inputId="register-roles"
                           :options="roleOptions"
@@ -200,10 +200,10 @@
                           @update:model-value="handleChange"
                           @blur="handleBlur"
                         />
-                        <span class="text-danger" v-if="errorMessage">{{ errorMessage }}</span>
+                        <span class="text-danger field-error" v-if="errorMessage">{{ errorMessage }}</span>
                       </div>
                     </Field>
-                    <small class="text-muted d-block">You can select multiple roles.</small>
+
                   </div>
                 </div>
 
@@ -297,8 +297,8 @@ const missingConfigMessage = computed(() => {
 
 const toggleLabel = computed(() =>
   mode.value === 'register'
-    ? 'Already have an account? Sign in with Firebase'
-    : 'Need an account? Register with Firebase',
+    ? 'Already have an account? Sign in here.'
+    : 'Need an account? Register here.',
 )
 
 const redirectPath = computed(() => (typeof route.query.redirect === 'string' ? route.query.redirect : '/'))
@@ -549,7 +549,28 @@ const getFriendlyErrorMessage = (error) => {
   text-decoration: underline;
 }
 
+.field-wrapper {
+  display: flex;
+  flex-direction: column;
+}
+
+.field-error {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.85rem;
+}
+
 .text-danger {
   font-size: 0.85rem;
+}
+
+.field-wrapper :deep(.p-inputtext),
+.field-wrapper :deep(.p-password),
+.field-wrapper :deep(.p-password-input),
+.field-wrapper :deep(.p-calendar),
+.field-wrapper :deep(.p-calendar .p-inputtext),
+.field-wrapper :deep(.p-datepicker .p-inputtext),
+.field-wrapper :deep(.p-multiselect) {
+  width: 100%;
 }
 </style>
