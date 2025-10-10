@@ -113,6 +113,87 @@ const formatDisplayDate = (key) => {
   return key
 }
 
+const toCsvValue = (value) => {
+  if (value === undefined || value === null) return ''
+  const stringValue = value instanceof Date ? value.toISOString() : String(value)
+  const escaped = stringValue.replace(/"/g, '""')
+  if (/[",\n]/u.test(escaped)) {
+    return `"${escaped}"`
+  }
+  return escaped
+}
+
+const createCsvContent = (records, columns) => {
+  if (!Array.isArray(columns) || columns.length === 0) return null
+
+  const safeRecords = Array.isArray(records) ? records : []
+
+  const headerRow = columns.map((column) => toCsvValue(column.header)).join(',')
+
+  const dataRows = safeRecords.map((record) =>
+    columns
+      .map((column) => {
+        const rawValue =
+          typeof column.formatter === 'function'
+            ? column.formatter(record[column.accessor], record)
+            : record[column.accessor]
+        return toCsvValue(rawValue)
+      })
+      .join(','),
+  )
+
+  return [headerRow, ...dataRows].join('\r\n')
+}
+
+const downloadCsvFile = (content, filename) => {
+  if (!content || typeof window === 'undefined' || typeof document === 'undefined') return
+
+  const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+
+  const link = document.createElement('a')
+  link.href = url
+  link.setAttribute('download', filename)
+  link.style.display = 'none'
+
+  document.body.appendChild(link)
+  link.click()
+
+  document.body.removeChild(link)
+  URL.revokeObjectURL(url)
+}
+
+const handleDownloadBeneficiaryBookings = () => {
+  const csvContent = createCsvContent(beneficiaryBookings.value, [
+    { header: 'Carer name', accessor: 'carerName' },
+    {
+      header: 'Booked date',
+      accessor: 'date',
+      formatter: (value) => formatDisplayDate(value),
+    },
+    {
+      header: 'Pick up location',
+      accessor: 'pickUpLocation',
+      formatter: (value) => value || 'Not provided',
+    },
+  ])
+
+  downloadCsvFile(csvContent, 'my-bookings-with-carers.csv')
+}
+
+const handleDownloadCarerBookings = () => {
+  const csvContent = createCsvContent(carerBookings.value, [
+    { header: 'Beneficiary name', accessor: 'beneficiaryName' },
+    {
+      header: 'Booked date',
+      accessor: 'date',
+      formatter: (value) => formatDisplayDate(value),
+    },
+  ])
+
+  downloadCsvFile(csvContent, 'my-bookings-with-beneficiaries.csv')
+}
+
 const parseAvailability = (entries) => {
   const availableDates = new Set()
   if (!Array.isArray(entries)) return availableDates
@@ -512,6 +593,15 @@ onBeforeUnmount(() => {
             </p>
           </header>
 
+          <div class="bookings-manager__section-actions">
+            <Button
+              label="Download bookings CSV"
+              icon="pi pi-download"
+              :disabled="beneficiaryBookings.length === 0"
+              @click="handleDownloadBeneficiaryBookings"
+            />
+          </div>
+
           <div class="bookings-manager__feedback" v-if="beneficiaryActionError">
             <Message severity="error">{{ beneficiaryActionError }}</Message>
           </div>
@@ -555,6 +645,15 @@ onBeforeUnmount(() => {
               View who has booked your support and manage those bookings here.
             </p>
           </header>
+
+          <div class="bookings-manager__section-actions">
+            <Button
+              label="Download bookings CSV"
+              icon="pi pi-download"
+              :disabled="carerBookings.length === 0"
+              @click="handleDownloadCarerBookings"
+            />
+          </div>
 
           <div class="bookings-manager__feedback" v-if="carerActionError">
             <Message severity="error">{{ carerActionError }}</Message>
@@ -626,6 +725,11 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+}
+
+.bookings-manager__section-actions {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .bookings-manager__section-title {
