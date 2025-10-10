@@ -23,25 +23,32 @@ const displayName = computed(() => {
   return 'Guest'
 })
 
-const menuItems = [
-  {
-    label: 'Home',
-    command: () => router.push({ name: 'home' })
-  },
-  {
-    label: 'About',
-    command: () => router.push({ name: 'about' })
-  },
-  {
-    label:'Dashboard',
-    command: () => router.push({ name: 'dashboard' })
+const menuItems = computed(() => {
+  const items = [
+    {
+      label: 'Home',
+      command: () => router.push({ name: 'home' }),
+    },
+    {
+      label: 'About',
+      command: () => router.push({ name: 'about' }),
+    },
+  ]
+
+  if (isAuthenticated.value) {
+    items.push({
+      label: 'Dashboard',
+      command: () => router.push({ name: 'dashboard' }),
+    })
   }
-]
+
+  return items
+})
 
 const handleLogout = () => {
   logout()
   if (router.currentRoute.value.meta.requiresAuth) {
-    router.push({ name: 'Home' })
+    router.push({ name: 'home' })
   }
 }
 </script>
