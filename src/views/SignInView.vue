@@ -1,88 +1,289 @@
 <template>
   <div class="container py-5">
     <div class="row justify-content-center">
+      <div class="col-12 col-lg-8 col-xxl-6">
+        <div class="card shadow-sm">
+          <div class="card-body p-4">
+            <h1 class="h3 mb-3 text-center">Firebase Sign In</h1>
 
-      <div class="card shadow-sm">
-        <div class="card-body p-4">
-          <h1 class="h3 mb-3 text-center">Firebase Sign In</h1>
-          <p v-if="missingConfigMessage" class="alert alert-warning" role="alert">
-            {{ missingConfigMessage }}
-          </p>
-          <p v-if="successMessage" class="alert alert-success" role="alert">
-            {{ successMessage }}
-          </p>
-          <p v-if="errorMessage" class="alert alert-danger" role="alert">
-            {{ errorMessage }}
-          </p>
-          <form @submit.prevent="handleSubmit" novalidate>
-            <div class="mb-3">
-              <label for="firebase-email" class="form-label">Email address</label>
-              <input
-                id="firebase-email"
-                type="email"
-                class="form-control"
-                v-model="form.email"
-                autocomplete="email"
-                required
-              />
-            </div>
-            <div class="mb-3">
-              <label for="firebase-password" class="form-label">Password</label>
-              <input
-                id="firebase-password"
-                type="password"
-                class="form-control"
-                v-model="form.password"
-                autocomplete="current-password"
-                required
-                minlength="6"
-              />
-              <div class="form-text">Passwords must be at least 6 characters long.</div>
-            </div>
-            <div class="d-grid gap-2">
-              <button type="submit" class="btn btn-primary" :disabled="loading || !isConfigured">
-                <span v-if="loading" class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                {{ submitLabel }}
-              </button>
-            </div>
-          </form>
-          <div class="mt-4 text-center">
-            <button
-              type="button"
-              class="btn btn-link p-0 text-decoration-none"
-              @click="toggleMode"
-              :disabled="loading"
+            <Message
+              v-if="missingConfigMessage"
+              severity="warn"
+              class="mb-3"
+              :closable="false"
             >
-              {{ toggleLabel }}
-            </button>
+              {{ missingConfigMessage }}
+            </Message>
+
+            <Message v-if="successMessage" severity="success" class="mb-3" :closable="false">
+              {{ successMessage }}
+            </Message>
+
+            <Message v-if="errorMessage" severity="error" class="mb-3" :closable="false">
+              {{ errorMessage }}
+            </Message>
+
+            <VForm
+              v-if="mode === 'login'"
+              :initial-values="loginInitialValues"
+              @submit="handleLogin"
+            >
+              <div class="p-fluid">
+                <div class="mb-3">
+                  <label for="login-email" class="form-label">Email address</label>
+                  <Field name="email" :rules="loginEmailRules" v-slot="{ value, handleChange, handleBlur, errorMessage }">
+                    <div>
+                      <InputText
+                        id="login-email"
+                        type="email"
+                        autocomplete="email"
+                        :model-value="value"
+                        @update:model-value="handleChange"
+                        @blur="handleBlur"
+                      />
+                      <span class="text-danger" v-if="errorMessage">{{ errorMessage }}</span>
+                    </div>
+                  </Field>
+                </div>
+
+                <div class="mb-4">
+                  <label for="login-password" class="form-label">Password</label>
+                  <Field name="password" :rules="loginPasswordRules" v-slot="{ value, handleChange, handleBlur, errorMessage }">
+                    <div>
+                      <Password
+                        id="login-password"
+                        toggleMask
+                        :feedback="false"
+                        autocomplete="current-password"
+                        :model-value="value"
+                        @update:model-value="handleChange"
+                        @blur="handleBlur"
+                      />
+                      <span class="text-danger" v-if="errorMessage">{{ errorMessage }}</span>
+                    </div>
+                  </Field>
+                </div>
+
+                <Button
+                  type="submit"
+                  label="Sign in"
+                  class="w-100"
+                  :loading="loading"
+                  :disabled="loading || !isConfigured"
+                />
+              </div>
+            </VForm>
+
+            <VForm
+              v-else
+              :initial-values="registrationInitialValues"
+              @submit="handleRegister"
+            >
+              <div class="p-fluid">
+                <div class="row g-3">
+                  <div class="col-12 col-md-6">
+                    <label for="register-username" class="form-label">Username</label>
+                    <Field name="username" :rules="usernameRules" v-slot="{ value, handleChange, handleBlur, errorMessage }">
+                      <div>
+                        <InputText
+                          id="register-username"
+                          autocomplete="username"
+                          :model-value="value"
+                          @update:model-value="handleChange"
+                          @blur="handleBlur"
+                        />
+                        <span class="text-danger" v-if="errorMessage">{{ errorMessage }}</span>
+                      </div>
+                    </Field>
+                  </div>
+
+                  <div class="col-12 col-md-6">
+                    <label for="register-email" class="form-label">Email address</label>
+                    <Field name="email" :rules="emailRules" v-slot="{ value, handleChange, handleBlur, errorMessage }">
+                      <div>
+                        <InputText
+                          id="register-email"
+                          type="email"
+                          autocomplete="email"
+                          :model-value="value"
+                          @update:model-value="handleChange"
+                          @blur="handleBlur"
+                        />
+                        <span class="text-danger" v-if="errorMessage">{{ errorMessage }}</span>
+                      </div>
+                    </Field>
+                  </div>
+
+                  <div class="col-12 col-md-6">
+                    <label for="register-password" class="form-label">Password</label>
+                    <Field name="password" :rules="passwordRules" v-slot="{ value, handleChange, handleBlur, errorMessage }">
+                      <div>
+                        <Password
+                          id="register-password"
+                          toggleMask
+                          :feedback="false"
+                          autocomplete="new-password"
+                          :model-value="value"
+                          @update:model-value="handleChange"
+                          @blur="handleBlur"
+                        />
+                        <span class="text-danger" v-if="errorMessage">{{ errorMessage }}</span>
+                      </div>
+                    </Field>
+                    <small class="text-muted d-block">At least 8 characters, 1 uppercase, 1 lowercase, 1 number.</small>
+                  </div>
+
+                  <div class="col-12 col-md-6">
+                    <label for="register-confirm-password" class="form-label">Confirm password</label>
+                    <Field name="confirmPassword" :rules="confirmPasswordRules" v-slot="{ value, handleChange, handleBlur, errorMessage }">
+                      <div>
+                        <Password
+                          id="register-confirm-password"
+                          toggleMask
+                          :feedback="false"
+                          autocomplete="new-password"
+                          :model-value="value"
+                          @update:model-value="handleChange"
+                          @blur="handleBlur"
+                        />
+                        <span class="text-danger" v-if="errorMessage">{{ errorMessage }}</span>
+                      </div>
+                    </Field>
+                  </div>
+
+                  <div class="col-12 col-md-6">
+                    <label for="register-dob" class="form-label">Date of birth</label>
+                    <Field name="dateOfBirth" :rules="dateOfBirthRules" v-slot="{ value, handleChange, handleBlur, errorMessage }">
+                      <div>
+                        <DatePicker
+                          id="register-dob"
+                          showIcon
+                          :maxDate="today"
+                          dateFormat="yy-mm-dd"
+                          :model-value="value"
+                          @update:model-value="handleChange"
+                          @blur="handleBlur"
+                        />
+                        <span class="text-danger" v-if="errorMessage">{{ errorMessage }}</span>
+                      </div>
+                    </Field>
+                  </div>
+
+                  <div class="col-12 col-md-6">
+                    <label for="register-address" class="form-label">Address</label>
+                    <Field name="address" :rules="addressRules" v-slot="{ value, handleChange, handleBlur, errorMessage }">
+                      <div>
+                        <InputText
+                          id="register-address"
+                          autocomplete="street-address"
+                          :model-value="value"
+                          @update:model-value="handleChange"
+                          @blur="handleBlur"
+                        />
+                        <span class="text-danger" v-if="errorMessage">{{ errorMessage }}</span>
+                      </div>
+                    </Field>
+                  </div>
+
+                  <div class="col-12">
+                    <label for="register-roles" class="form-label">User roles</label>
+                    <Field name="roles" :rules="roleRules" :initial-value="[]" v-slot="{ value, handleChange, handleBlur, errorMessage }">
+                      <div>
+                        <MultiSelect
+                          inputId="register-roles"
+                          :options="roleOptions"
+                          optionLabel="label"
+                          optionValue="value"
+                          display="chip"
+                          placeholder="Select roles"
+                          :model-value="value"
+                          @update:model-value="handleChange"
+                          @blur="handleBlur"
+                        />
+                        <span class="text-danger" v-if="errorMessage">{{ errorMessage }}</span>
+                      </div>
+                    </Field>
+                    <small class="text-muted d-block">You can select multiple roles.</small>
+                  </div>
+                </div>
+
+                <Button
+                  type="submit"
+                  label="Create account"
+                  class="w-100 mt-4"
+                  :loading="loading"
+                  :disabled="loading || !isConfigured"
+                />
+              </div>
+            </VForm>
+
+            <div class="mt-4 text-center">
+              <Button
+                type="button"
+                class="p-button-link"
+                :label="toggleLabel"
+                @click="toggleMode"
+                :disabled="loading"
+              />
+            </div>
           </div>
         </div>
       </div>
     </div>
   </div>
-
 </template>
 
 <script setup>
-import { computed, reactive, ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth'
-import { auth, missingKeys } from '../firebase'
+import {
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  fetchSignInMethodsForEmail,
+} from 'firebase/auth'
+import { doc, serverTimestamp, setDoc, Timestamp } from 'firebase/firestore'
+import { Field, Form as VForm } from 'vee-validate'
+import Button from 'primevue/button'
+import InputText from 'primevue/inputtext'
+import Password from 'primevue/password'
+import DatePicker from 'primevue/datepicker'
+import MultiSelect from 'primevue/multiselect'
+import Message from 'primevue/message'
+
+import { auth, db, missingKeys } from '../firebase'
 import { useAuth } from '../composables/auth'
 
 const router = useRouter()
 const route = useRoute()
 const { loginWithFirebase } = useAuth()
 
-const form = reactive({
-  email: '',
-  password: '',
-})
-
 const mode = ref('login')
 const loading = ref(false)
 const successMessage = ref('')
 const errorMessage = ref('')
+
+const today = new Date()
+
+const roleOptions = [
+  { label: 'Donor', value: 'donor' },
+  { label: 'Beneficiary', value: 'beneficiary' },
+  { label: 'Carer', value: 'carer' },
+]
+
+const loginInitialValues = {
+  email: '',
+  password: '',
+}
+
+const registrationInitialValues = {
+  username: '',
+  email: '',
+  password: '',
+  confirmPassword: '',
+  dateOfBirth: null,
+  address: '',
+  roles: [],
+}
 
 const isConfigured = computed(() => !!auth && missingKeys.length === 0)
 
@@ -94,24 +295,147 @@ const missingConfigMessage = computed(() => {
   return `Firebase configuration is incomplete. Please provide the following keys: ${missingKeys.join(', ')}`
 })
 
-const submitLabel = computed(() => (mode.value === 'register' ? 'Create account' : 'Sign in'))
-
 const toggleLabel = computed(() =>
   mode.value === 'register'
     ? 'Already have an account? Sign in with Firebase'
-    : "Need an account? Register with Firebase",
+    : 'Need an account? Register with Firebase',
 )
 
 const redirectPath = computed(() => (typeof route.query.redirect === 'string' ? route.query.redirect : '/'))
 
-const handleSubmit = async () => {
+const usernameRules = (value) => {
+  if (!value || !value.trim()) {
+    return 'Username is required.'
+  }
+
+  if (!/^[a-zA-Z0-9 ]+$/.test(value)) {
+    return 'Username may only contain letters, numbers, and spaces.'
+  }
+
+  return true
+}
+
+const emailRules = async (value) => {
+  if (!value) {
+    return 'Email is required.'
+  }
+
+  const normalized = value.trim().toLowerCase()
+
+  const emailPattern = /[^\s@]+@[^\s@]+\.[^\s@]+/
+  if (!emailPattern.test(normalized)) {
+    return 'Please enter a valid email address.'
+  }
+
+  if (!auth) {
+    return true
+  }
+
+  try {
+    const methods = await fetchSignInMethodsForEmail(auth, normalized)
+    if (methods.length > 0) {
+      return 'An account with this email already exists.'
+    }
+  } catch (error) {
+    console.error('Failed to validate email uniqueness', error)
+    return 'Unable to validate email. Please try again.'
+  }
+
+  return true
+}
+
+const loginEmailRules = (value) => {
+  if (!value) {
+    return 'Email is required.'
+  }
+
+  const normalized = value.trim()
+
+  const emailPattern = /[^\s@]+@[^\s@]+\.[^\s@]+/
+  return emailPattern.test(normalized) ? true : 'Please enter a valid email address.'
+}
+
+const passwordRules = (value) => {
+  if (!value) {
+    return 'Password is required.'
+  }
+
+  if (value.length < 8) {
+    return 'Password must be at least 8 characters long.'
+  }
+
+  if (!/[A-Z]/.test(value) || !/[a-z]/.test(value) || !/[0-9]/.test(value)) {
+    return 'Password must include uppercase, lowercase, and a number.'
+  }
+
+  return true
+}
+
+const loginPasswordRules = (value) => {
+  if (!value) {
+    return 'Password is required.'
+  }
+
+  return value.length >= 6 ? true : 'Password must be at least 6 characters long.'
+}
+
+const confirmPasswordRules = (value, ctx) => {
+  if (!value) {
+    return 'Please confirm your password.'
+  }
+
+  if (value !== ctx.form.password) {
+    return 'Passwords do not match.'
+  }
+
+  return true
+}
+
+const dateOfBirthRules = (value) => {
+  if (!value) {
+    return 'Date of birth is required.'
+  }
+
+  const date = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return 'Please choose a valid date.'
+  }
+
+  if (date > today) {
+    return 'Date of birth cannot be in the future.'
+  }
+
+  return true
+}
+
+const addressRules = (value) => {
+  if (!value || !value.trim()) {
+    return 'Address is required.'
+  }
+
+  const normalized = value.trim()
+  if (normalized.length < 10) {
+    return 'Address must be at least 10 characters long.'
+  }
+
+  if (!/^[a-zA-Z0-9 ]+$/.test(normalized)) {
+    return 'Address may only contain letters, numbers, and spaces.'
+  }
+
+  return true
+}
+
+const roleRules = (value) => {
+  if (!Array.isArray(value) || value.length === 0) {
+    return 'Please select at least one role.'
+  }
+
+  return true
+}
+
+const handleLogin = async (values, { resetForm }) => {
   errorMessage.value = ''
   successMessage.value = ''
-
-  if (!form.email || !form.password) {
-    errorMessage.value = 'Please provide both an email address and password.'
-    return
-  }
 
   if (!isConfigured.value) {
     errorMessage.value = 'Firebase has not been configured yet. Please add your Firebase credentials.'
@@ -121,19 +445,11 @@ const handleSubmit = async () => {
   loading.value = true
 
   try {
-    const credential =
-      mode.value === 'register'
-        ? await createUserWithEmailAndPassword(auth, form.email, form.password)
-        : await signInWithEmailAndPassword(auth, form.email, form.password)
+    const credential = await signInWithEmailAndPassword(auth, values.email.trim(), values.password)
 
     loginWithFirebase(credential.user)
 
-    const message =
-      mode.value === 'register'
-        ? 'Account created successfully. Redirecting to your destination...'
-        : 'Signed in successfully. Redirecting to your destination...'
-
-    successMessage.value = message
+    successMessage.value = 'Signed in successfully. Redirecting to your destination...'
 
     setTimeout(() => {
       router.push(redirectPath.value || '/')
@@ -142,7 +458,47 @@ const handleSubmit = async () => {
     errorMessage.value = getFriendlyErrorMessage(error)
   } finally {
     loading.value = false
-    form.password = ''
+    resetForm({ values: loginInitialValues })
+  }
+}
+
+const handleRegister = async (values, { resetForm }) => {
+  errorMessage.value = ''
+  successMessage.value = ''
+
+  if (!isConfigured.value) {
+    errorMessage.value = 'Firebase has not been configured yet. Please add your Firebase credentials.'
+    return
+  }
+
+  loading.value = true
+
+  try {
+    const normalizedEmail = values.email.trim().toLowerCase()
+    const credential = await createUserWithEmailAndPassword(auth, normalizedEmail, values.password)
+
+    const userDocRef = doc(db, 'users', credential.user.uid)
+    await setDoc(userDocRef, {
+      username: values.username.trim(),
+      email: normalizedEmail,
+      dateOfBirth: values.dateOfBirth ? Timestamp.fromDate(new Date(values.dateOfBirth)) : null,
+      address: values.address.trim(),
+      roles: values.roles,
+      createdAt: serverTimestamp(),
+    })
+
+    loginWithFirebase(credential.user)
+
+    successMessage.value = 'Account created successfully. Redirecting to your destination...'
+
+    setTimeout(() => {
+      router.push(redirectPath.value || '/')
+    }, 300)
+  } catch (error) {
+    errorMessage.value = getFriendlyErrorMessage(error)
+  } finally {
+    loading.value = false
+    resetForm({ values: registrationInitialValues })
   }
 }
 
@@ -180,5 +536,20 @@ const getFriendlyErrorMessage = (error) => {
 <style scoped>
 .card {
   border: none;
+}
+
+.p-button-link {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--bs-primary);
+}
+
+.p-button-link:hover {
+  text-decoration: underline;
+}
+
+.text-danger {
+  font-size: 0.85rem;
 }
 </style>
