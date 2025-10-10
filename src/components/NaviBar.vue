@@ -1,10 +1,18 @@
 <script setup>
-import { RouterLink } from 'vue-router'
+import { RouterLink, useRouter } from 'vue-router'
 import MenuBar from 'primevue/menubar'
 
+const router = useRouter()
+
 const menuItems = [
-  { label: 'Home', to: '/' },
-  { label: 'About', to: '/about' }
+  {
+    label: 'Home',
+    command: () => router.push({ name: 'home' })
+  },
+  {
+    label: 'About',
+    command: () => router.push({ name: 'about' })
+  }
 ]
 </script>
 
