@@ -3,6 +3,8 @@ import { computed } from 'vue'
 import TabView from 'primevue/tabview'
 import TabPanel from 'primevue/tabpanel'
 
+import AvailabilityManager from '@/components/dashboard/AvailabilityManager.vue'
+
 import { useAuth } from '@/composables/auth'
 
 const { state } = useAuth()
@@ -29,7 +31,9 @@ const username = computed(() => {
     <h1 class="dashboard__heading">Welcome Back, {{ username }}</h1>
 
     <TabView class="dashboard__tabs">
-      <TabPanel header="My Availability" />
+      <TabPanel header="My Availability">
+        <AvailabilityManager />
+      </TabPanel>
       <TabPanel header="Bookings" />
       <TabPanel header="Donation History" />
       <TabPanel header="Billing" />
