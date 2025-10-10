@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
 import Message from 'primevue/message'
-import { collection, onSnapshot, orderBy, query, where } from 'firebase/firestore'
+import { collection, onSnapshot, query, where } from 'firebase/firestore'
 
 import { useAuth } from '@/composables/auth'
 import { db } from '@/firebase'
@@ -41,6 +41,26 @@ const currencyFormatter = new Intl.NumberFormat(undefined, {
   minimumFractionDigits: 2,
 })
 
+const getTimestampValue = (timestamp) => {
+  if (!timestamp) return 0
+  if (typeof timestamp.toMillis === 'function') {
+    const millis = timestamp.toMillis()
+    return Number.isNaN(millis) ? 0 : millis
+  }
+  if (typeof timestamp.toDate === 'function') {
+    const date = timestamp.toDate()
+    return Number.isNaN(date?.getTime()) ? 0 : date.getTime()
+  }
+  if (timestamp instanceof Date) {
+    const millis = timestamp.getTime()
+    return Number.isNaN(millis) ? 0 : millis
+  }
+  if (typeof timestamp === 'number' && Number.isFinite(timestamp)) {
+    return timestamp
+  }
+  return 0
+}
+
 const formatDate = (timestamp) => {
   if (!timestamp) return 'Pending'
   if (typeof timestamp.toDate === 'function') {
@@ -49,6 +69,10 @@ const formatDate = (timestamp) => {
   }
   if (timestamp instanceof Date) {
     return Number.isNaN(timestamp.getTime()) ? 'Pending' : dateFormatter.format(timestamp)
+  }
+  if (typeof timestamp === 'number' && Number.isFinite(timestamp)) {
+    const date = new Date(timestamp)
+    return Number.isNaN(date.getTime()) ? 'Pending' : dateFormatter.format(date)
   }
   return 'Pending'
 }
@@ -83,16 +107,17 @@ const startListening = () => {
     const donationsQuery = query(
       collection(db, 'donations'),
       where('userId', '==', firebaseUser.value.uid),
-      orderBy('createdAt', 'desc'),
     )
 
     unsubscribeRef.value = onSnapshot(
       donationsQuery,
       (snapshot) => {
-        donations.value = snapshot.docs.map((docSnapshot) => ({
-          id: docSnapshot.id,
-          ...docSnapshot.data(),
-        }))
+        donations.value = snapshot.docs
+          .map((docSnapshot) => ({
+            id: docSnapshot.id,
+            ...docSnapshot.data(),
+          }))
+          .sort((a, b) => getTimestampValue(b.createdAt) - getTimestampValue(a.createdAt))
         loading.value = false
       },
       (error) => {
