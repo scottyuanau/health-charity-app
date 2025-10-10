@@ -76,6 +76,7 @@
 
             <VForm
               v-else
+              ref="registerFormRef"
               :initial-values="registrationInitialValues"
               @submit="handleRegister"
             >
@@ -176,6 +177,7 @@
                         <InputText
                           id="register-address"
                           autocomplete="street-address"
+                          ref="addressInputRef"
                           :model-value="value"
                           @update:model-value="handleChange"
                           @blur="handleBlur"
@@ -234,7 +236,7 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   createUserWithEmailAndPassword,
@@ -263,6 +265,11 @@ const successMessage = ref('')
 const errorMessage = ref('')
 
 const today = new Date()
+
+const registerFormRef = ref(null)
+const addressInputRef = ref(null)
+let addressAutocomplete = null
+let googleMapsScriptPromise = null
 
 const roleOptions = [
   { label: 'Donor', value: 'donor' },
@@ -418,8 +425,9 @@ const addressRules = (value) => {
     return 'Address must be at least 10 characters long.'
   }
 
-  if (!/^[a-zA-Z0-9 ]+$/.test(normalized)) {
-    return 'Address may only contain letters, numbers, and spaces.'
+  // Allow letters, numbers, spaces, commas, periods, hyphens, slashes, and apostrophes
+  if (!/^[a-zA-Z0-9\s,.'\/-]+$/.test(normalized)) {
+    return 'Address may only contain letters, numbers, spaces, commas, periods, hyphens, slashes, and apostrophes.'
   }
 
   return true
@@ -432,6 +440,127 @@ const roleRules = (value) => {
 
   return true
 }
+
+const loadGoogleMapsApi = () => {
+  if (typeof window === 'undefined') {
+    return Promise.reject(new Error('Window is not available'))
+  }
+
+  if (window.google?.maps?.places) {
+    return Promise.resolve(window.google)
+  }
+
+  if (googleMapsScriptPromise) {
+    return googleMapsScriptPromise
+  }
+
+  const apiKey = import.meta.env.VITE_GOOGLE_MAP_API_KEY
+
+  if (!apiKey) {
+    console.warn('Google Maps API key is not configured. Address autocomplete will be disabled.')
+    return Promise.reject(new Error('Missing Google Maps API key'))
+  }
+
+  googleMapsScriptPromise = new Promise((resolve, reject) => {
+    const existingScript = document.querySelector('script[data-google-maps-script]')
+
+    if (existingScript) {
+      existingScript.addEventListener('load', () => resolve(window.google), { once: true })
+      existingScript.addEventListener('error', reject, { once: true })
+      return
+    }
+
+    const script = document.createElement('script')
+    script.setAttribute('data-google-maps-script', 'true')
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`
+    script.async = true
+    script.defer = true
+    script.onload = () => resolve(window.google)
+    script.onerror = (event) => reject(event)
+
+    document.head.appendChild(script)
+  })
+
+  return googleMapsScriptPromise
+}
+
+const destroyAddressAutocomplete = () => {
+  if (addressAutocomplete) {
+    window.google?.maps?.event?.clearInstanceListeners?.(addressAutocomplete)
+    addressAutocomplete = null
+  }
+}
+
+const initializeAddressAutocomplete = async () => {
+  if (mode.value !== 'register') {
+    return
+  }
+
+  await nextTick()
+
+  const inputComponent = addressInputRef.value
+  const inputElement = inputComponent?.$el?.querySelector('input') || inputComponent?.$el || inputComponent
+
+  if (!inputElement) {
+    return
+  }
+
+  try {
+    const google = await loadGoogleMapsApi()
+
+    if (!google?.maps?.places) {
+      return
+    }
+
+    if (addressAutocomplete) {
+      destroyAddressAutocomplete()
+    }
+
+    addressAutocomplete = new google.maps.places.Autocomplete(inputElement, {
+      types: ['geocode'],
+      fields: ['formatted_address'],
+    })
+
+    addressAutocomplete.addListener('place_changed', () => {
+      const place = addressAutocomplete?.getPlace?.()
+      const formattedAddress = place?.formatted_address || inputElement.value || ''
+
+      registerFormRef.value?.setFieldValue?.('address', formattedAddress, true)
+    })
+  } catch (error) {
+    console.error('Failed to initialize Google Maps autocomplete', error)
+  }
+}
+
+onMounted(() => {
+  if (mode.value === 'register') {
+    initializeAddressAutocomplete()
+  }
+})
+
+onBeforeUnmount(() => {
+  destroyAddressAutocomplete()
+})
+
+watch(
+  () => mode.value,
+  (newMode) => {
+    if (newMode === 'register') {
+      initializeAddressAutocomplete()
+    } else {
+      destroyAddressAutocomplete()
+    }
+  },
+)
+
+watch(
+  () => addressInputRef.value,
+  (input) => {
+    if (input && mode.value === 'register') {
+      initializeAddressAutocomplete()
+    }
+  },
+)
 
 const handleLogin = async (values, { resetForm }) => {
   errorMessage.value = ''
