@@ -664,7 +664,31 @@ const getFriendlyErrorMessage = (error) => {
 
 <style scoped>
 .card {
-  border: none;
+  border: 1px solid var(--app-border-color, transparent);
+  background: var(--app-card-background, #fff);
+  color: var(--app-text-color, inherit);
+  box-shadow: var(--app-card-shadow, 0 0.5rem 1.5rem rgba(15, 23, 42, 0.08));
+}
+
+.card :deep(.form-label),
+.card :deep(.form-text),
+.card :deep(.p-inputtext),
+.card :deep(.p-password-input),
+.card :deep(.p-calendar input),
+.card :deep(.p-multiselect),
+.card :deep(.p-dropdown),
+.card :deep(.p-multiselect-label) {
+  color: inherit;
+}
+
+.card :deep(.p-inputtext),
+.card :deep(.p-password-input),
+.card :deep(.p-calendar input),
+.card :deep(.p-multiselect),
+.card :deep(.p-dropdown),
+.card :deep(.p-multiselect-label) {
+  background-color: var(--app-surface, #fff);
+  border-color: var(--app-border-color, rgba(0, 0, 0, 0.08));
 }
 
 .p-button-link {

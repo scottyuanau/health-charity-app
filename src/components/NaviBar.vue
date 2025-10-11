@@ -870,7 +870,7 @@ watch(
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 2px solid #fff;
+  border: 2px solid var(--app-card-background, #fff);
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.05);
 }
 
@@ -879,10 +879,14 @@ watch(
   top: 115%;
   right: 0;
   width: min(22rem, 85vw);
-  background: #fff;
+  background: var(--app-card-background, #fff);
+  color: var(--app-text-color, inherit);
   border-radius: 0.75rem;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  box-shadow: 0 16px 32px rgba(15, 23, 42, 0.18);
+  border: 1px solid var(--app-border-color, rgba(0, 0, 0, 0.08));
+  box-shadow: var(
+      --app-card-shadow,
+      0 16px 32px rgba(15, 23, 42, 0.18)
+    );
   padding: 0.75rem;
   z-index: 1050;
 }
@@ -966,7 +970,7 @@ watch(
 
 .navbar-notifications__message {
   margin: 0;
-  color: var(--bs-secondary-color);
+  color: var(--app-muted-text, var(--bs-secondary-color));
   font-size: 0.9rem;
   line-height: 1.4;
   word-break: break-word;
@@ -974,13 +978,13 @@ watch(
 
 .navbar-notifications__timestamp {
   font-size: 0.75rem;
-  color: var(--bs-tertiary-color, #6c757d);
+  color: var(--app-muted-text, var(--bs-tertiary-color, #6c757d));
 }
 
 .navbar-notifications__status {
   padding: 0.75rem;
   font-size: 0.9rem;
-  color: var(--bs-secondary-color);
+  color: var(--app-muted-text, var(--bs-secondary-color));
   text-align: center;
 }
 
@@ -997,6 +1001,22 @@ watch(
 .navbar-notifications__transition-leave-to {
   opacity: 0;
   transform: translateY(-10%);
+}
+
+@media (prefers-color-scheme: dark) {
+  .navbar-notifications__badge {
+    box-shadow: 0 0 0 1px rgba(148, 163, 184, 0.35);
+  }
+
+  .navbar-notifications__notification:hover,
+  .navbar-notifications__notification:focus-visible {
+    background: rgba(248, 113, 113, 0.18);
+  }
+
+  .navbar-notifications__notification--unread {
+    background: rgba(248, 113, 113, 0.16);
+    box-shadow: inset 0 0 0 1px rgba(248, 113, 113, 0.28);
+  }
 }
 
 .donate-now-button {
