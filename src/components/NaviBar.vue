@@ -210,6 +210,80 @@ const resetNotifications = () => {
   notificationsDropdownVisible.value = false
 }
 
+const createNotificationsListener = (useFallback = false) => {
+  const constraints = [where('recipientId', '==', firebaseUser.value.uid)]
+
+  if (!useFallback) {
+    constraints.push(orderBy('createdAt', 'desc'), limit(notificationsLimit))
+  }
+
+  let unsubscribeFn = null
+
+  unsubscribeFn = onSnapshot(
+    query(collection(db, 'notifications'), ...constraints),
+    (snapshot) => {
+      let items = snapshot.docs.map((snapshotDoc) => {
+        const data = snapshotDoc.data() || {}
+        const createdAt = data?.createdAt?.toDate?.() || null
+
+        const messageBody = typeof data.messageBody === 'string' ? data.messageBody : ''
+        const messagePreview =
+          typeof data.messagePreview === 'string' && data.messagePreview
+            ? data.messagePreview
+            : messageBody
+
+        return {
+          id: snapshotDoc.id,
+          read: Boolean(data.read),
+          senderName: data.senderName || 'New message',
+          messageBody,
+          messagePreview,
+          createdAt,
+        }
+      })
+
+      if (useFallback) {
+        items = items
+          .sort((a, b) => {
+            const timeA = a.createdAt?.getTime?.() ?? 0
+            const timeB = b.createdAt?.getTime?.() ?? 0
+            return timeB - timeA
+          })
+          .slice(0, notificationsLimit)
+      }
+
+      notifications.value = items
+      notificationsLoading.value = false
+    },
+    (error) => {
+      if (!useFallback && error?.code === 'failed-precondition') {
+        console.warn(
+          'Missing Firestore index for notifications query. Falling back to client-side sorting.',
+          error,
+        )
+
+        if (typeof unsubscribeFn === 'function') {
+          unsubscribeFn()
+        }
+
+        notificationsLoading.value = true
+        notificationsError.value = ''
+        notifications.value = []
+
+        unsubscribeFromNotifications.value = createNotificationsListener(true)
+        return
+      }
+
+      console.error('Failed to subscribe to notifications', error)
+      notificationsError.value = 'We could not load your notifications right now.'
+      notifications.value = []
+      notificationsLoading.value = false
+    },
+  )
+
+  return unsubscribeFn
+}
+
 const subscribeToNotifications = () => {
   if (!db || !firebaseUser.value?.uid) {
     if (typeof unsubscribeFromNotifications.value === 'function') {
@@ -228,46 +302,7 @@ const subscribeToNotifications = () => {
   notificationsError.value = ''
 
   try {
-    const notificationsQuery = query(
-      collection(db, 'notifications'),
-      where('recipientId', '==', firebaseUser.value.uid),
-      orderBy('createdAt', 'desc'),
-      limit(notificationsLimit),
-    )
-
-    unsubscribeFromNotifications.value = onSnapshot(
-      notificationsQuery,
-      (snapshot) => {
-        const items = snapshot.docs.map((snapshotDoc) => {
-          const data = snapshotDoc.data() || {}
-          const createdAt = data?.createdAt?.toDate?.() || null
-
-          const messageBody = typeof data.messageBody === 'string' ? data.messageBody : ''
-          const messagePreview =
-            typeof data.messagePreview === 'string' && data.messagePreview
-              ? data.messagePreview
-              : messageBody
-
-          return {
-            id: snapshotDoc.id,
-            read: Boolean(data.read),
-            senderName: data.senderName || 'New message',
-            messageBody,
-            messagePreview,
-            createdAt,
-          }
-        })
-
-        notifications.value = items
-        notificationsLoading.value = false
-      },
-      (error) => {
-        console.error('Failed to subscribe to notifications', error)
-        notificationsError.value = 'We could not load your notifications right now.'
-        notifications.value = []
-        notificationsLoading.value = false
-      },
-    )
+    unsubscribeFromNotifications.value = createNotificationsListener(false)
   } catch (error) {
     console.error('Failed to subscribe to notifications', error)
     notificationsError.value = 'We could not load your notifications right now.'
