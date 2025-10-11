@@ -148,7 +148,7 @@ const showBookingsTab = computed(
       <TabPanel header="Settings">
         <SettingsManager />
       </TabPanel>
-      <TabPanel header="Admin">
+      <TabPanel v-if="isAdminUser" header="Admin">
         <AdminUserManager />
       </TabPanel>
     </TabView>
