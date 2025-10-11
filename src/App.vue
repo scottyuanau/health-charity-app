@@ -1,6 +1,7 @@
 <script setup>
 import { RouterView } from 'vue-router'
 import NaviBar from '@/components/NaviBar.vue'
+import AppFooter from '@/components/AppFooter.vue'
 
 </script>
 
@@ -12,6 +13,8 @@ import NaviBar from '@/components/NaviBar.vue'
   <main class="page-container">
     <RouterView />
   </main>
+
+  <AppFooter />
 </template>
 
 <style scoped>
