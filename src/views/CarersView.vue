@@ -3,7 +3,8 @@ import { computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import Rating from 'primevue/rating'
 
-import { useCarersStore, getPlaceholderPhoto } from '@/stores/carers'
+import { useCarersStore } from '@/stores/carers'
+import placeholderAvatar from '@/assets/Profile_avatar_placeholder_large.png'
 
 const router = useRouter()
 const carersStore = useCarersStore()
@@ -21,7 +22,7 @@ const resolvePhoto = (photo) => {
     return photo
   }
 
-  return getPlaceholderPhoto(200)
+  return placeholderAvatar
 }
 
 onMounted(() => {

@@ -4,7 +4,8 @@ import { useRoute, useRouter } from 'vue-router'
 import Rating from 'primevue/rating'
 import Button from 'primevue/button'
 
-import { useCarersStore, getPlaceholderPhoto, getDescriptionPlaceholder } from '@/stores/carers'
+import { useCarersStore, getDescriptionPlaceholder } from '@/stores/carers'
+import placeholderAvatar from '@/assets/Profile_avatar_placeholder_large.png'
 
 const route = useRoute()
 const router = useRouter()
@@ -24,7 +25,7 @@ const profilePhoto = computed(() => {
   if (carer.value?.photo?.trim()) {
     return carer.value.photo
   }
-  return getPlaceholderPhoto(300)
+  return placeholderAvatar
 })
 
 const description = computed(() => {
