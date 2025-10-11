@@ -965,7 +965,7 @@ watch(
 
 .navbar-notifications__sender {
   font-weight: 600;
-  color: var(--bs-body-color);
+  color: var(--app-text-color, var(--bs-body-color));
 }
 
 .navbar-notifications__message {
@@ -1016,6 +1016,18 @@ watch(
   .navbar-notifications__notification--unread {
     background: rgba(248, 113, 113, 0.16);
     box-shadow: inset 0 0 0 1px rgba(248, 113, 113, 0.28);
+  }
+
+  .navbar-notifications__sender {
+    color: #f8fafc;
+  }
+
+  .navbar-notifications__message {
+    color: rgba(226, 232, 240, 0.78);
+  }
+
+  .navbar-notifications__timestamp {
+    color: rgba(148, 163, 184, 0.82);
   }
 }
 
