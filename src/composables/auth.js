@@ -81,11 +81,6 @@ const state = reactive({
 
 const isAuthenticated = computed(() => state.user !== null)
 
-let resolveAuthReady
-const authReady = new Promise((resolve) => {
-  resolveAuthReady = resolve
-})
-
 function login(username, password) {
   if (username === credentials.username && password === credentials.password) {
     state.user = { username }
@@ -144,10 +139,7 @@ if (firebaseAuth) {
       persistUser(state.user)
     }
 
-    resolveAuthReady?.()
   })
-} else {
-  resolveAuthReady?.()
 }
 
 export function useAuth() {
@@ -160,4 +152,4 @@ export function useAuth() {
   }
 }
 
-export { authReady, isAuthenticated, login, loginWithFirebase, logout, state }
+export { isAuthenticated, login, loginWithFirebase, logout, state }
