@@ -280,6 +280,7 @@ onMounted(() => {
 .profile__details {
   display: grid;
   gap: 2rem;
+  min-width: 0;
 }
 
 .profile__header h1 {
@@ -329,6 +330,7 @@ onMounted(() => {
   padding: 1.5rem;
   border-radius: 1rem;
   background: rgba(59, 130, 246, 0.05);
+  min-width: 0;
 }
 
 .profile__dialog {
@@ -360,6 +362,7 @@ onMounted(() => {
 .profile__testimonials {
   display: grid;
   gap: 1.5rem;
+  min-width: 0;
 }
 
 .profile__testimonials h2 {
@@ -383,6 +386,7 @@ onMounted(() => {
   margin: 0;
   line-height: 1.6;
   color: var(--p-text-color);
+  overflow-wrap: anywhere;
 }
 
 .profile__testimonial-comment--muted {
@@ -394,6 +398,10 @@ onMounted(() => {
   margin: 0;
   line-height: 1.6;
   color: var(--p-text-muted-color);
+}
+
+.profile__review p {
+  overflow-wrap: anywhere;
 }
 
 .profile__thanks {
