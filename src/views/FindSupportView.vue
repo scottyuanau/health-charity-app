@@ -360,7 +360,7 @@ const focusCarerOnMap = (carerId) => {
   }
 }
 
-const handleSelectCarer = async (carerId) => {
+const directToCarer = async (carerId) => {
   if (!carerId) {
     return
   }
@@ -380,6 +380,14 @@ const handleSelectCarer = async (carerId) => {
   clearDirections()
   await nextTick()
   handleGetDirections()
+}
+
+const handleSelectCarer = async (carerId) => {
+  await directToCarer(carerId)
+}
+
+const handleDirectToCarer = async (carerId) => {
+  await directToCarer(carerId)
 }
 
 const initialiseDirections = () => {
@@ -709,12 +717,22 @@ onUnmounted(() => {
                 <span class="support-map__carer-review">{{ describeReviewSummary(carer) }}</span>
                 <span class="support-map__carer-location">{{ carer.locationLabel }}</span>
               </button>
-              <RouterLink
-                :to="{ name: 'carer-profile', params: { id: carer.id } }"
-                class="support-map__carer-profile"
-              >
-                View profile
-              </RouterLink>
+              <div class="support-map__carer-actions">
+                <RouterLink
+                  :to="{ name: 'carer-profile', params: { id: carer.id } }"
+                  class="support-map__carer-profile"
+                >
+                  View profile
+                </RouterLink>
+                <button
+                  type="button"
+                  class="support-map__carer-direct"
+                  :disabled="directionsLoading && isCarerSelected(carer.id)"
+                  @click="handleDirectToCarer(carer.id)"
+                >
+                  Direct here
+                </button>
+              </div>
             </li>
           </ul>
         </div>
@@ -970,6 +988,13 @@ onUnmounted(() => {
   border-radius: 0.75rem;
 }
 
+.support-map__carer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+}
+
 .support-map__carer-profile {
   align-self: flex-start;
   text-decoration: none;
@@ -985,6 +1010,36 @@ onUnmounted(() => {
 .support-map__carer-profile:focus-visible {
   transform: translateY(-1px);
   box-shadow: 0 10px 20px rgba(37, 99, 235, 0.2);
+}
+
+.support-map__carer-direct {
+  border: none;
+  background: #2563eb;
+  color: #fff;
+  font-weight: 600;
+  border-radius: 999px;
+  padding: 0.5rem 1.25rem;
+  cursor: pointer;
+  transition: transform 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
+}
+
+.support-map__carer-direct:hover,
+.support-map__carer-direct:focus-visible {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 20px rgba(37, 99, 235, 0.25);
+  background-color: #1d4ed8;
+}
+
+.support-map__carer-direct:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.35);
+  outline-offset: 2px;
+}
+
+.support-map__carer-direct:disabled {
+  cursor: not-allowed;
+  opacity: 0.75;
+  transform: none;
+  box-shadow: none;
 }
 
 .map-infowindow {
@@ -1025,6 +1080,17 @@ onUnmounted(() => {
   .support-map__clear-button {
     width: 100%;
     justify-content: center;
+  }
+
+  .support-map__carer-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .support-map__carer-profile,
+  .support-map__carer-direct {
+    width: 100%;
+    text-align: center;
   }
 }
 </style>
