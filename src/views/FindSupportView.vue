@@ -64,6 +64,33 @@ let userMarkerInstance = null
 let hasCenteredOnUser = false
 let hasCenteredOnCarers = false
 
+const fitMapToVisibleLocations = ({ includeUser = true } = {}) => {
+  if (!mapInstance.value || !googleMapsApi.value) {
+    return
+  }
+
+  const bounds = new googleMapsApi.value.LatLngBounds()
+  let hasVisibleLocations = false
+
+  carersWithLocations.value.forEach((carer) => {
+    if (!carer?.location) return
+
+    bounds.extend(carer.location)
+    hasVisibleLocations = true
+  })
+
+  if (includeUser && userLocation.value) {
+    bounds.extend(userLocation.value)
+    hasVisibleLocations = true
+  }
+
+  if (!hasVisibleLocations) {
+    return
+  }
+
+  mapInstance.value.fitBounds(bounds)
+}
+
 const escapeHtml = (value) => {
   if (typeof value !== 'string') {
     return ''
@@ -252,9 +279,8 @@ const refreshCarerMarkers = () => {
     }
   })
 
-  if (!hasCenteredOnCarers && carersWithLocations.value.length > 0 && !userLocation.value) {
-    mapInstance.value.setCenter(carersWithLocations.value[0].location)
-    mapInstance.value.setZoom(11)
+  if (!hasCenteredOnCarers && carersWithLocations.value.length > 0) {
+    fitMapToVisibleLocations({ includeUser: Boolean(userLocation.value) })
     hasCenteredOnCarers = true
   }
 }
@@ -337,8 +363,7 @@ const locateUser = async ({ force = false } = {}) => {
     updateUserMarker()
 
     if (!hasCenteredOnUser && mapInstance.value) {
-      mapInstance.value.setCenter(location)
-      mapInstance.value.setZoom(13)
+      fitMapToVisibleLocations({ includeUser: true })
       hasCenteredOnUser = true
     }
 
@@ -443,8 +468,7 @@ watch(
     updateUserMarker()
 
     if (userLocation.value && mapInstance.value && !hasCenteredOnUser) {
-      mapInstance.value.setCenter(userLocation.value)
-      mapInstance.value.setZoom(13)
+      fitMapToVisibleLocations({ includeUser: true })
       hasCenteredOnUser = true
     }
   },
