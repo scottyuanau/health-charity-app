@@ -33,8 +33,10 @@ const navLinks = [
 
 <style scoped>
 .app-footer {
-  border-top: 1px solid rgba(0, 0, 0, 0.08);
-  background: #f8f9fa;
+  border-top: 1px solid var(--app-border-color);
+  background: var(--app-card-background);
+  color: var(--app-text-color);
+  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
 }
 
 .app-footer__content {

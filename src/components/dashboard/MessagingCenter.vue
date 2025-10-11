@@ -1229,10 +1229,10 @@ onBeforeUnmount(() => {
   flex-direction: column;
   gap: 1rem;
   padding: 1.5rem;
-  border: 1px solid var(--p-surface-300, #d4d4d8);
+  border: 1px solid var(--app-border-color);
   border-radius: 1rem;
-  background-color: var(--p-surface-0, #ffffff);
-  box-shadow: 0 10px 30px rgb(15 23 42 / 0.08);
+  background-color: var(--app-card-background);
+  box-shadow: var(--app-card-shadow);
 }
 
 .messaging-center__section-heading {
@@ -1303,7 +1303,7 @@ onBeforeUnmount(() => {
 
 .messaging-center__ai-description {
   margin: 0;
-  color: var(--p-surface-600, #52525b);
+  color: var(--app-muted-text);
   line-height: 1.5;
 }
 
@@ -1390,14 +1390,15 @@ onBeforeUnmount(() => {
   gap: 0.5rem;
   padding: 1rem;
   border-radius: 0.75rem;
-  background-color: var(--p-surface-100, #f4f4f5);
+  background-color: var(--app-subtle-surface);
+  border: 1px solid var(--app-border-color);
 }
 
 .messaging-center__message-header {
   display: flex;
   justify-content: space-between;
   font-size: 0.875rem;
-  color: var(--p-surface-600, #52525b);
+  color: var(--app-muted-text);
 }
 
 .messaging-center__message-meta {
@@ -1408,12 +1409,12 @@ onBeforeUnmount(() => {
 
 .messaging-center__message-sender {
   font-weight: 600;
-  color: var(--p-surface-900, #18181b);
+  color: var(--app-text-color);
 }
 
 .messaging-center__message-date {
   font-size: 0.8125rem;
-  color: var(--p-surface-600, #52525b);
+  color: var(--app-muted-text);
 }
 
 .messaging-center__message-actions {
@@ -1438,12 +1439,12 @@ onBeforeUnmount(() => {
 
 .messaging-center__pagination-label {
   font-size: 0.875rem;
-  color: var(--p-surface-600, #52525b);
+  color: var(--app-muted-text);
 }
 
 .messaging-center__hint {
   font-size: 0.875rem;
-  color: var(--p-surface-600, #52525b);
+  color: var(--app-muted-text);
 }
 
 .messaging-center__hint--error {

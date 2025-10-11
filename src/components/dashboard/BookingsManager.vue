@@ -894,11 +894,11 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
-  border: 1px solid var(--p-surface-200, #dee2e6);
+  border: 1px solid var(--app-border-color);
   border-radius: 0.75rem;
   padding: 1.5rem;
-  background-color: var(--p-surface-0, #fff);
-  box-shadow: 0 0.5rem 1.5rem rgba(15, 23, 42, 0.08);
+  background-color: var(--app-card-background);
+  box-shadow: var(--app-card-shadow);
 }
 
 .bookings-manager__section-header {
@@ -920,7 +920,7 @@ onBeforeUnmount(() => {
 
 .bookings-manager__section-subtitle {
   margin: 0;
-  color: var(--p-surface-500, #6c757d);
+  color: var(--app-muted-text);
 }
 
 .bookings-manager__form {
@@ -956,7 +956,7 @@ onBeforeUnmount(() => {
 
 .bookings-manager__hint {
   font-size: 0.9rem;
-  color: var(--p-surface-500, #6c757d);
+  color: var(--app-muted-text);
 }
 
 .bookings-manager__hint--error {
@@ -968,6 +968,8 @@ onBeforeUnmount(() => {
 }
 
 :deep(.p-datatable .p-datatable-thead > tr > th) {
-  background-color: var(--p-surface-0, #fff);
+  background-color: var(--app-card-background);
+  border-bottom: 1px solid var(--app-border-color);
+  color: var(--app-text-color);
 }
 </style>
