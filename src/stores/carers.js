@@ -1,6 +1,44 @@
 import { defineStore } from 'pinia'
+import { collection, getDocs, query, where } from 'firebase/firestore'
+
+import { db } from '@/firebase'
 
 const descriptionPlaceholder = 'The carer is busy writing the introduction, come back later.'
+
+const normaliseRating = (value) => {
+  if (!Number.isFinite(value)) return null
+  const rounded = Math.round(value)
+  return Math.min(5, Math.max(1, rounded))
+}
+
+const extractRatings = (input) => {
+  if (!Array.isArray(input)) return []
+
+  return input
+    .map((entry) => {
+      if (entry === null || entry === undefined) return null
+      if (typeof entry === 'number' && Number.isFinite(entry)) return entry
+      if (typeof entry === 'string' && entry.trim()) {
+        const parsed = Number(entry)
+        return Number.isFinite(parsed) ? parsed : null
+      }
+
+      if (typeof entry === 'object') {
+        const candidate =
+          entry.rating ?? entry.score ?? entry.value ?? entry.amount ?? entry.points ?? null
+
+        if (typeof candidate === 'number' && Number.isFinite(candidate)) return candidate
+        if (typeof candidate === 'string' && candidate.trim()) {
+          const parsed = Number(candidate)
+          return Number.isFinite(parsed) ? parsed : null
+        }
+      }
+
+      return null
+    })
+    .map((value) => normaliseRating(value))
+    .filter((rating) => rating !== null)
+}
 
 const calculateAverage = (reviews = []) => {
   if (!Array.isArray(reviews) || reviews.length === 0) {
@@ -11,33 +49,49 @@ const calculateAverage = (reviews = []) => {
   return total / reviews.length
 }
 
+const transformCarerRecord = (snapshotDoc) => {
+  const data = snapshotDoc.data() || {}
+
+  const reviews = extractRatings(data.reviews)
+  const potentialPhotoFields = ['photoURL', 'photoUrl', 'photo', 'avatarUrl']
+  const photo = potentialPhotoFields.reduce((result, field) => {
+    if (result) return result
+    const value = data[field]
+    if (typeof value === 'string' && value.trim()) {
+      return value.trim()
+    }
+    return ''
+  }, '')
+
+  const descriptionFields = ['bio', 'about', 'description']
+  const description = descriptionFields.reduce((result, field) => {
+    if (result) return result
+    const value = data[field]
+    if (typeof value === 'string' && value.trim()) {
+      return value.trim()
+    }
+    return ''
+  }, '')
+
+  const username = typeof data?.username === 'string' ? data.username.trim() : ''
+  const email = typeof data?.email === 'string' ? data.email.trim() : ''
+
+  return {
+    id: snapshotDoc.id,
+    name: username || (email ? email.split('@')[0] || email : 'Carer'),
+    email,
+    photo,
+    description,
+    reviews,
+  }
+}
+
 export const useCarersStore = defineStore('carers', {
   state: () => ({
-    carers: [
-      {
-        id: 'amelia-stone',
-        name: 'Amelia Stone',
-        photo: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=400&q=80',
-        description:
-          'Amelia has been supporting families in our community for over a decade, focusing on personalised care plans that celebrate independence.',
-        reviews: [5, 4, 5, 5],
-      },
-      {
-        id: 'liam-patel',
-        name: 'Liam Patel',
-        photo: '',
-        description:
-          'Liam specialises in dementia care and is known for creating calming routines that help people feel safe and understood.',
-        reviews: [4, 4, 5],
-      },
-      {
-        id: 'nina-owens',
-        name: 'Nina Owens',
-        photo: 'https://images.unsplash.com/photo-1544723795-3fb6469f5b39?auto=format&fit=crop&w=400&q=80',
-        description: '',
-        reviews: [],
-      },
-    ],
+    carers: [],
+    loading: false,
+    loadError: '',
+    hasLoaded: false,
   }),
   getters: {
     allCarers: (state) => state.carers,
@@ -54,11 +108,42 @@ export const useCarersStore = defineStore('carers', {
     },
   },
   actions: {
+    async fetchCarers(force = false) {
+      if (this.loading) return
+      if (this.hasLoaded && !force) return
+
+      if (!db) {
+        if (import.meta.env.DEV) {
+          console.warn('Firebase has not been initialised. Skipping carers fetch.')
+        }
+        this.carers = []
+        this.loadError = 'Carers are unavailable because Firebase is not configured.'
+        this.hasLoaded = true
+        return
+      }
+
+      this.loading = true
+      this.loadError = ''
+
+      try {
+        const carersQuery = query(collection(db, 'users'), where('roles', 'array-contains', 'carer'))
+        const snapshot = await getDocs(carersQuery)
+        this.carers = snapshot.docs.map((doc) => transformCarerRecord(doc))
+      } catch (error) {
+        console.error('Failed to load carers', error)
+        this.carers = []
+        this.loadError = 'We were unable to load carers. Please try again later.'
+      } finally {
+        this.loading = false
+        this.hasLoaded = true
+      }
+    },
     addReview(id, rating) {
       const carer = this.carers.find((item) => item.id === id)
       if (!carer) return
 
-      const normalisedRating = Math.min(5, Math.max(1, Math.round(rating)))
+      const normalisedRating = normaliseRating(rating)
+      if (normalisedRating === null) return
       if (!Array.isArray(carer.reviews)) {
         carer.reviews = []
       }

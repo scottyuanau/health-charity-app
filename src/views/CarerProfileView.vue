@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Rating from 'primevue/rating'
 import Button from 'primevue/button'
@@ -15,6 +15,9 @@ const userRating = ref(null)
 const reviewSubmitted = ref(false)
 
 const carer = computed(() => carersStore.getCarerById(carerId.value))
+const isLoading = computed(() => carersStore.loading)
+const loadError = computed(() => carersStore.loadError)
+const hasLoaded = computed(() => carersStore.hasLoaded)
 
 const profilePhoto = computed(() => {
   if (carer.value?.photo?.trim()) {
@@ -58,10 +61,27 @@ watch(
 const goBack = () => {
   router.push({ name: 'carers' })
 }
+
+onMounted(() => {
+  carersStore.fetchCarers()
+})
 </script>
 
 <template>
-  <section v-if="carer" class="profile">
+  <section v-if="isLoading" class="profile profile--status">
+    <div class="profile__details">
+      <h1>Loading carer profile&hellip;</h1>
+      <p>Please wait while we fetch the latest details.</p>
+    </div>
+  </section>
+  <section v-else-if="loadError" class="profile profile--status">
+    <div class="profile__details">
+      <h1>We couldn’t load this carer</h1>
+      <p>{{ loadError }}</p>
+      <Button label="Back to carers" severity="secondary" @click="goBack" />
+    </div>
+  </section>
+  <section v-else-if="carer" class="profile">
     <div class="profile__photo">
       <img :src="profilePhoto" :alt="`${carer.name} profile photo`" />
       <Button class="profile__back" label="Back to carers" severity="secondary" @click="goBack" />
@@ -92,11 +112,17 @@ const goBack = () => {
       </section>
     </div>
   </section>
-  <section v-else class="profile profile--missing">
+  <section v-else-if="hasLoaded" class="profile profile--missing">
     <div class="profile__details">
       <h1>Carer not found</h1>
       <p>We couldn’t find the profile you were looking for. Please return to the carers list.</p>
       <Button label="Back to carers" severity="secondary" @click="goBack" />
+    </div>
+  </section>
+  <section v-else class="profile profile--status">
+    <div class="profile__details">
+      <h1>Loading carer profile&hellip;</h1>
+      <p>Please wait while we fetch the latest details.</p>
     </div>
   </section>
 </template>
@@ -183,6 +209,11 @@ const goBack = () => {
 }
 
 .profile--missing {
+  justify-items: center;
+  text-align: center;
+}
+
+.profile--status {
   justify-items: center;
   text-align: center;
 }

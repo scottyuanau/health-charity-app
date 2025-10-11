@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import Rating from 'primevue/rating'
 
@@ -9,6 +9,8 @@ const router = useRouter()
 const carersStore = useCarersStore()
 
 const carers = computed(() => carersStore.allCarers)
+const isLoading = computed(() => carersStore.loading)
+const loadError = computed(() => carersStore.loadError)
 
 const navigateToCarer = (carerId) => {
   router.push({ name: 'carer-profile', params: { id: carerId } })
@@ -21,6 +23,10 @@ const resolvePhoto = (photo) => {
 
   return getPlaceholderPhoto(200)
 }
+
+onMounted(() => {
+  carersStore.fetchCarers()
+})
 </script>
 
 <template>
@@ -30,7 +36,15 @@ const resolvePhoto = (photo) => {
       <p>Learn more about the dedicated carers who support our community every day.</p>
     </header>
 
-    <div class="carers__grid">
+    <div v-if="isLoading" class="carers__status">
+      <p>Loading carers&hellip;</p>
+    </div>
+
+    <div v-else-if="loadError" class="carers__status carers__status--error">
+      <p>{{ loadError }}</p>
+    </div>
+
+    <div v-else-if="carers.length" class="carers__grid">
       <article
         v-for="carer in carers"
         :key="carer.id"
@@ -55,6 +69,10 @@ const resolvePhoto = (photo) => {
           </p>
         </div>
       </article>
+    </div>
+
+    <div v-else class="carers__status">
+      <p>No carers are currently available. Please check back soon.</p>
     </div>
   </section>
 </template>
@@ -148,5 +166,18 @@ const resolvePhoto = (photo) => {
   margin: 0;
   color: var(--p-text-muted-color);
   line-height: 1.5;
+}
+
+.carers__status {
+  text-align: center;
+  color: var(--p-text-muted-color);
+  background: rgba(59, 130, 246, 0.05);
+  border-radius: 1rem;
+  padding: 2rem 1.5rem;
+}
+
+.carers__status--error {
+  color: #b91c1c;
+  background: rgba(239, 68, 68, 0.08);
 }
 </style> 
