@@ -54,6 +54,8 @@ const googleGeminiApiKey =
     ? import.meta.env.VITE_GOOGLE_GEMINI_API_KEY.trim()
     : ''
 
+const googleGeminiModel = 'gemini-2.5-flash'
+
 const isGeminiConfigured = computed(() => Boolean(googleGeminiApiKey))
 
 const aiDialogVisible = ref(false)
@@ -183,7 +185,7 @@ const generateAiContent = async () => {
 
   try {
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${googleGeminiApiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${googleGeminiModel}:generateContent?key=${googleGeminiApiKey}`,
       {
         method: 'POST',
         headers: {
@@ -207,8 +209,8 @@ const generateAiContent = async () => {
         if (errorPayload?.error?.message) {
           errorMessage = errorPayload.error.message
         }
-      } catch (error) {
-        // Ignore JSON parsing errors
+      } catch (parseError) {
+        console.warn('Unable to parse Gemini error response', parseError)
       }
       throw new Error(errorMessage)
     }
@@ -498,8 +500,8 @@ const handleSendEmail = async () => {
         if (errorPayload?.error) {
           errorMessage = errorPayload.error
         }
-      } catch (error) {
-        // Ignore JSON parsing errors – we'll fall back to the default message
+      } catch (parseError) {
+        console.warn('Unable to parse SendGrid error response', parseError)
       }
       throw new Error(errorMessage)
     }
