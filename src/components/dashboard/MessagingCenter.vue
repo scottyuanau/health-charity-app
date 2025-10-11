@@ -371,7 +371,7 @@ const loadRecipients = async () => {
         name: username || email || recipientLabel.value,
         email: email || '',
       }
-    }).filter((recipient) => recipient.id !== firebaseUser.value.uid)
+    })
   } catch (error) {
     console.error('Failed to load recipients', error)
     recipientsError.value = 'We were unable to load recipients. Please try again later.'
