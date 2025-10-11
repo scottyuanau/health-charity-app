@@ -88,48 +88,132 @@ const transformCarerRecord = (snapshotDoc) => {
 
   const address = typeof data?.address === 'string' ? data.address.trim() : ''
 
-  const extractCoordinates = (value) => {
-    if (!value) return null
+  const extractCoordinates = (input, visited = new WeakSet()) => {
+    if (!input) return null
 
     const tryCreatePoint = (latCandidate, lngCandidate) => {
-      const lat = Number(latCandidate)
-      const lng = Number(lngCandidate)
+      const toNumber = (value) => {
+        if (typeof value === 'number') {
+          return Number.isFinite(value) ? value : null
+        }
 
-      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        if (typeof value === 'string') {
+          const trimmed = value.trim()
+          if (!trimmed) return null
+          const parsed = Number(trimmed)
+          return Number.isFinite(parsed) ? parsed : null
+        }
+
+        return null
+      }
+
+      const lat = toNumber(latCandidate)
+      const lng = toNumber(lngCandidate)
+
+      if (lat === null || lng === null) {
         return null
       }
 
       return { lat, lng }
     }
 
-    if (typeof value === 'object') {
-      if (typeof value.latitude === 'number' && typeof value.longitude === 'number') {
-        return tryCreatePoint(value.latitude, value.longitude)
+    const parseLatLngString = (value) => {
+      if (typeof value !== 'string') return null
+
+      const cleaned = value.replace(/[()[\]{}]/g, ' ').trim()
+      if (!cleaned) return null
+
+      const matches = cleaned.match(/-?\d+(?:\.\d+)?/g)
+      if (!matches || matches.length < 2) {
+        return null
       }
 
-      if (typeof value.lat === 'number' && typeof value.lng === 'number') {
-        return tryCreatePoint(value.lat, value.lng)
-      }
-
-      if (typeof value.lat === 'number' && typeof value.long === 'number') {
-        return tryCreatePoint(value.lat, value.long)
-      }
-
-      if (typeof value.latitude === 'number' && typeof value.long === 'number') {
-        return tryCreatePoint(value.latitude, value.long)
-      }
-
-      if (typeof value._lat === 'number' && typeof value._long === 'number') {
-        return tryCreatePoint(value._lat, value._long)
-      }
-
-      if (Array.isArray(value) && value.length >= 2) {
-        return tryCreatePoint(value[1], value[0])
-      }
+      return (
+        tryCreatePoint(matches[0], matches[1]) ||
+        (matches.length >= 3 ? tryCreatePoint(matches[1], matches[2]) : null)
+      )
     }
 
-    if (Array.isArray(value) && value.length >= 2) {
-      return tryCreatePoint(value[1], value[0])
+    if (typeof input === 'string') {
+      return parseLatLngString(input)
+    }
+
+    if (Array.isArray(input)) {
+      if (input.length >= 2) {
+        return (
+          tryCreatePoint(input[0], input[1]) ||
+          tryCreatePoint(input[1], input[0])
+        )
+      }
+      return null
+    }
+
+    if (typeof input !== 'object') {
+      return null
+    }
+
+    if (visited.has(input)) {
+      return null
+    }
+    visited.add(input)
+
+    const directCandidates = [
+      [input.latitude, input.longitude],
+      [input.lat, input.lng],
+      [input.lat, input.long],
+      [input.latitude, input.long],
+      [input._lat, input._long],
+      [input.y, input.x],
+    ]
+
+    for (const [latCandidate, lngCandidate] of directCandidates) {
+      const point = tryCreatePoint(latCandidate, lngCandidate)
+      if (point) return point
+    }
+
+    if (typeof input.latLng === 'string') {
+      const parsed = parseLatLngString(input.latLng)
+      if (parsed) return parsed
+    }
+
+    if (Array.isArray(input.coordinates) && input.coordinates.length >= 2) {
+      const point =
+        tryCreatePoint(input.coordinates[0], input.coordinates[1]) ||
+        tryCreatePoint(input.coordinates[1], input.coordinates[0])
+      if (point) return point
+    }
+
+    if (typeof input.coordinates === 'string') {
+      const parsed = parseLatLngString(input.coordinates)
+      if (parsed) return parsed
+    }
+
+    if (Array.isArray(input.location) || typeof input.location === 'object') {
+      const nested = extractCoordinates(input.location, visited)
+      if (nested) return nested
+    }
+
+    if (Array.isArray(input.position) || typeof input.position === 'object') {
+      const nested = extractCoordinates(input.position, visited)
+      if (nested) return nested
+    }
+
+    if (Array.isArray(input.geo) || typeof input.geo === 'object') {
+      const nested = extractCoordinates(input.geo, visited)
+      if (nested) return nested
+    }
+
+    if (Array.isArray(input.geopoint) || typeof input.geopoint === 'object') {
+      const nested = extractCoordinates(input.geopoint, visited)
+      if (nested) return nested
+    }
+
+    for (const key of Object.keys(input)) {
+      const candidate = input[key]
+      const nested = extractCoordinates(candidate, visited)
+      if (nested) {
+        return nested
+      }
     }
 
     return null
@@ -141,6 +225,9 @@ const transformCarerRecord = (snapshotDoc) => {
     data?.position,
     data?.geo,
     data?.geopoint,
+    data?.profile?.location,
+    data?.profile?.coordinates,
+    data?.profile?.geo,
   ]
 
   const location = locationCandidates.reduce((result, candidate) => {
