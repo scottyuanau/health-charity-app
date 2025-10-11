@@ -138,6 +138,33 @@ const notificationsContainerRef = ref(null)
 const clearingNotifications = ref(false)
 const unsubscribeFromNotifications = ref(null)
 const notificationsLimit = 20
+const notificationsPageSize = 5
+const notificationsCurrentPage = ref(1)
+
+const totalNotificationPages = computed(() => {
+  if (notifications.value.length === 0) {
+    return 1
+  }
+
+  return Math.ceil(notifications.value.length / notificationsPageSize)
+})
+
+const showNotificationsPagination = computed(
+  () => notifications.value.length > notificationsPageSize,
+)
+
+const paginatedNotifications = computed(() => {
+  const startIndex = (notificationsCurrentPage.value - 1) * notificationsPageSize
+  return notifications.value.slice(startIndex, startIndex + notificationsPageSize)
+})
+
+const canGoToPreviousNotificationsPage = computed(
+  () => notificationsCurrentPage.value > 1,
+)
+
+const canGoToNextNotificationsPage = computed(
+  () => notificationsCurrentPage.value < totalNotificationPages.value,
+)
 
 const unreadNotificationCount = computed(
   () => notifications.value.filter((notification) => !notification.read).length,
@@ -222,6 +249,19 @@ const resetNotifications = () => {
   notificationsError.value = ''
   notificationsDropdownVisible.value = false
   clearingNotifications.value = false
+  notificationsCurrentPage.value = 1
+}
+
+const goToPreviousNotificationsPage = () => {
+  if (canGoToPreviousNotificationsPage.value) {
+    notificationsCurrentPage.value -= 1
+  }
+}
+
+const goToNextNotificationsPage = () => {
+  if (canGoToNextNotificationsPage.value) {
+    notificationsCurrentPage.value += 1
+  }
 }
 
 const createNotificationsListener = (useFallback = false) => {
@@ -522,6 +562,16 @@ onUnmounted(() => {
   }
 })
 
+watch(notifications, () => {
+  notificationsCurrentPage.value = 1
+})
+
+watch(notificationsDropdownVisible, (isVisible) => {
+  if (isVisible) {
+    notificationsCurrentPage.value = 1
+  }
+})
+
 watch(
   () => firebaseUser.value?.uid,
   (newUid) => {
@@ -639,7 +689,7 @@ watch(
                     </div>
                     <ul class="navbar-notifications__list">
                       <li
-                        v-for="notification in notifications"
+                        v-for="notification in paginatedNotifications"
                         :key="notification.id"
                         class="navbar-notifications__item"
                       >
@@ -670,6 +720,33 @@ watch(
                         </button>
                       </li>
                     </ul>
+                    <div
+                      v-if="showNotificationsPagination"
+                      class="navbar-notifications__pagination"
+                    >
+                      <button
+                        type="button"
+                        class="navbar-notifications__pagination-button"
+                        @click.stop="goToPreviousNotificationsPage"
+                        :disabled="!canGoToPreviousNotificationsPage"
+                        aria-label="Previous notifications"
+                      >
+                        Previous
+                      </button>
+                      <span class="navbar-notifications__pagination-info">
+                        Page {{ notificationsCurrentPage }} of
+                        {{ totalNotificationPages }}
+                      </span>
+                      <button
+                        type="button"
+                        class="navbar-notifications__pagination-button"
+                        @click.stop="goToNextNotificationsPage"
+                        :disabled="!canGoToNextNotificationsPage"
+                        aria-label="Next notifications"
+                      >
+                        Next
+                      </button>
+                    </div>
                   </div>
                 </div>
               </transition>
@@ -931,6 +1008,45 @@ watch(
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+}
+
+.navbar-notifications__pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.85rem;
+  margin-top: 0.25rem;
+}
+
+.navbar-notifications__pagination-button {
+  border: none;
+  background: transparent;
+  color: var(--bs-primary);
+  cursor: pointer;
+  font-weight: 600;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.5rem;
+  transition: color 0.2s ease, background-color 0.2s ease;
+}
+
+.navbar-notifications__pagination-button:hover,
+.navbar-notifications__pagination-button:focus-visible {
+  color: var(--bs-danger);
+  background: rgba(220, 53, 69, 0.1);
+  outline: none;
+}
+
+.navbar-notifications__pagination-button:disabled {
+  color: var(--bs-secondary-color);
+  cursor: not-allowed;
+  background: transparent;
+}
+
+.navbar-notifications__pagination-info {
+  flex: 1;
+  text-align: center;
+  color: var(--app-muted-text, var(--bs-secondary-color));
 }
 
 .navbar-notifications__item {
