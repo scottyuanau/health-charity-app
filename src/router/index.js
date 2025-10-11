@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import { isAuthenticated } from '../composables/auth'
+import { authReady, isAuthenticated } from '../composables/auth'
 import HomeView from '../views/HomeView.vue'
 import CarersView from '../views/CarersView.vue'
 import FindSupportView from '../views/FindSupportView.vue'
@@ -47,13 +47,12 @@ const router = createRouter({
   ],
 })
 
-router.beforeEach((to, from, next) => {
-  if (to.meta.requiresAuth && !isAuthenticated.value) {
-    next({ name: 'login', query: { redirect: to.fullPath } })
-    return
-  }
+router.beforeEach(async (to) => {
+  await authReady
 
-  next()
+  if (to.meta.requiresAuth && !isAuthenticated.value) {
+    return { name: 'login', query: { redirect: to.fullPath } }
+  }
 })
 
 export default router
