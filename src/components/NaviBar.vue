@@ -60,10 +60,6 @@ const menuItems = computed(() => {
       label: 'Carers',
       command: () => router.push({ name: 'carers' }),
     },
-    {
-      label: 'Find Support',
-      command: () => router.push({ name: 'find-support' }),
-    },
   ]
 
   if (isAuthenticated.value) {
