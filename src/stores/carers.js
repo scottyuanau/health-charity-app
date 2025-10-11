@@ -22,33 +22,97 @@ const normaliseRating = (value) => {
   return Math.min(5, Math.max(1, rounded))
 }
 
-const extractRatings = (input) => {
+const normaliseTimestamp = (value) => {
+  if (!value) return null
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value
+  }
+
+  if (typeof value === 'string') {
+    const parsed = Date.parse(value)
+    if (Number.isFinite(parsed)) {
+      return parsed
+    }
+  }
+
+  if (typeof value === 'object') {
+    if (typeof value.toMillis === 'function') {
+      return value.toMillis()
+    }
+    if (typeof value.toDate === 'function') {
+      const date = value.toDate()
+      if (date instanceof Date && !Number.isNaN(date.getTime())) {
+        return date.getTime()
+      }
+    }
+  }
+
+  return null
+}
+
+const extractReviewComment = (entry) => {
+  if (!entry || typeof entry !== 'object') return ''
+
+  const commentFields = ['comment', 'review', 'text', 'message', 'note', 'content']
+
+  for (const field of commentFields) {
+    const candidate = entry[field]
+    if (typeof candidate === 'string' && candidate.trim()) {
+      return sanitizeMultilineText(candidate, { maxLength: 800 })
+    }
+  }
+
+  return ''
+}
+
+const extractReviews = (input) => {
   if (!Array.isArray(input)) return []
 
   return input
     .map((entry) => {
       if (entry === null || entry === undefined) return null
-      if (typeof entry === 'number' && Number.isFinite(entry)) return entry
+
+      if (typeof entry === 'number' && Number.isFinite(entry)) {
+        const rating = normaliseRating(entry)
+        if (rating === null) return null
+        return { rating, comment: '', createdAt: null }
+      }
+
       if (typeof entry === 'string' && entry.trim()) {
         const parsed = Number(entry)
-        return Number.isFinite(parsed) ? parsed : null
+        const rating = normaliseRating(parsed)
+        if (rating === null) return null
+        return { rating, comment: '', createdAt: null }
       }
 
       if (typeof entry === 'object') {
         const candidate =
           entry.rating ?? entry.score ?? entry.value ?? entry.amount ?? entry.points ?? null
 
-        if (typeof candidate === 'number' && Number.isFinite(candidate)) return candidate
-        if (typeof candidate === 'string' && candidate.trim()) {
-          const parsed = Number(candidate)
-          return Number.isFinite(parsed) ? parsed : null
+        const rating = normaliseRating(
+          typeof candidate === 'string' && candidate.trim() ? Number(candidate) : candidate,
+        )
+
+        if (rating === null) {
+          return null
+        }
+
+        return {
+          rating,
+          comment: extractReviewComment(entry),
+          createdAt: normaliseTimestamp(entry.createdAt ?? entry.timestamp ?? entry.date ?? null),
         }
       }
 
       return null
     })
-    .map((value) => normaliseRating(value))
-    .filter((rating) => rating !== null)
+    .filter((review) => review !== null)
+    .sort((a, b) => {
+      const aDate = a.createdAt ?? 0
+      const bDate = b.createdAt ?? 0
+      return bDate - aDate
+    })
 }
 
 const calculateAverage = (reviews = []) => {
@@ -56,14 +120,14 @@ const calculateAverage = (reviews = []) => {
     return 5
   }
 
-  const total = reviews.reduce((sum, rating) => sum + rating, 0)
+  const total = reviews.reduce((sum, review) => sum + (review?.rating ?? 0), 0)
   return total / reviews.length
 }
 
 const transformCarerRecord = (snapshotDoc) => {
   const data = snapshotDoc.data() || {}
 
-  const reviews = extractRatings(data.reviews)
+  const reviews = extractReviews(data.reviews)
   const potentialPhotoFields = ['photoURL', 'photoUrl', 'photo', 'avatarUrl']
   const photo = potentialPhotoFields.reduce((result, field) => {
     if (result) return result
@@ -371,7 +435,7 @@ export const useCarersStore = defineStore('carers', {
         const existingReviews = Array.isArray(carer.reviews) ? carer.reviews : []
         const fetchedReviews = reviewsByCarer.get(carer.id) || []
 
-        const combined = extractRatings([...existingReviews, ...fetchedReviews])
+        const combined = extractReviews([...existingReviews, ...fetchedReviews])
 
         return {
           ...carer,
@@ -379,12 +443,20 @@ export const useCarersStore = defineStore('carers', {
         }
       })
     },
-    async addReview(id, rating) {
+    async addReview(id, rating, comment = '') {
       const carer = this.carers.find((item) => item.id === id)
       if (!carer) return false
 
       const normalisedRating = normaliseRating(rating)
       if (normalisedRating === null) return false
+
+      const sanitisedComment = sanitizeMultilineText(comment, { maxLength: 800 })
+
+      const buildLocalReview = () => ({
+        rating: normalisedRating,
+        comment: sanitisedComment,
+        createdAt: Date.now(),
+      })
 
       const ensureReviewArray = () => {
         if (!Array.isArray(carer.reviews)) {
@@ -397,16 +469,25 @@ export const useCarersStore = defineStore('carers', {
           console.warn('Firebase has not been initialised. Review stored locally only.')
         }
         ensureReviewArray()
-        carer.reviews.push(normalisedRating)
+        carer.reviews.push(buildLocalReview())
         return true
       }
 
       let reviewPersisted = false
 
+      const reviewPayload = {
+        rating: normalisedRating,
+        createdAt: serverTimestamp(),
+      }
+
+      if (sanitisedComment) {
+        reviewPayload.comment = sanitisedComment
+      }
+
       try {
         const carerRef = doc(db, 'users', id)
         await updateDoc(carerRef, {
-          reviews: arrayUnion(normalisedRating),
+          reviews: arrayUnion(reviewPayload),
         })
         reviewPersisted = true
       } catch (error) {
@@ -416,8 +497,7 @@ export const useCarersStore = defineStore('carers', {
       try {
         await addDoc(collection(db, 'reviews'), {
           carerId: id,
-          rating: normalisedRating,
-          createdAt: serverTimestamp(),
+          ...reviewPayload,
         })
         reviewPersisted = true
       } catch (error) {
@@ -429,7 +509,7 @@ export const useCarersStore = defineStore('carers', {
       }
 
       ensureReviewArray()
-      carer.reviews.push(normalisedRating)
+      carer.reviews.push(buildLocalReview())
       return true
     },
     getDescription(id) {

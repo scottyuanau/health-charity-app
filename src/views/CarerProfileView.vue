@@ -1,8 +1,11 @@
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Rating from 'primevue/rating'
 import Button from 'primevue/button'
+import Dialog from 'primevue/dialog'
+import Textarea from 'primevue/textarea'
+import Carousel from 'primevue/carousel'
 
 import { useCarersStore, getDescriptionPlaceholder } from '@/stores/carers'
 import placeholderAvatar from '@/assets/Profile_avatar_placeholder_large.png'
@@ -12,9 +15,16 @@ const router = useRouter()
 const carersStore = useCarersStore()
 
 const carerId = computed(() => route.params.id)
-const userRating = ref(null)
+const ratingTrigger = ref(0)
 const reviewSubmitted = ref(false)
 const reviewError = ref('')
+const reviewDialogVisible = ref(false)
+const reviewSubmitting = ref(false)
+
+const reviewForm = reactive({
+  rating: 0,
+  comment: '',
+})
 
 const carer = computed(() => carersStore.getCarerById(carerId.value))
 const isLoading = computed(() => carersStore.loading)
@@ -45,25 +55,68 @@ const reviewCount = computed(() => {
   return carersStore.getReviewCount(carer.value.id)
 })
 
-const handleRating = async (value) => {
-  if (!carer.value) return
+const carerReviews = computed(() => {
+  if (!Array.isArray(carer.value?.reviews)) {
+    return []
+  }
+  return carer.value.reviews.slice(0, 10)
+})
+
+const showReviewCarousel = computed(() => carerReviews.value.length > 0)
+
+const openReviewDialog = (value = 0) => {
+  reviewForm.rating = value || 0
+  reviewDialogVisible.value = true
   reviewError.value = ''
-  const success = await carersStore.addReview(carer.value.id, value)
+  ratingTrigger.value = 0
+}
+
+const resetReviewForm = () => {
+  reviewForm.rating = 0
+  reviewForm.comment = ''
+}
+
+const submitReview = async () => {
+  if (!carer.value) return
+
+  if (!reviewForm.rating) {
+    reviewError.value = 'Please select a rating before submitting your review.'
+    return
+  }
+
+  reviewSubmitting.value = true
+  reviewError.value = ''
+
+  const success = await carersStore.addReview(
+    carer.value.id,
+    reviewForm.rating,
+    reviewForm.comment,
+  )
+
+  reviewSubmitting.value = false
+
   if (success) {
-    userRating.value = value
     reviewSubmitted.value = true
+    reviewDialogVisible.value = false
+    resetReviewForm()
   } else {
     reviewError.value = 'We were unable to save your review. Please try again.'
-    userRating.value = null
   }
+}
+
+const handleDialogHide = () => {
+  resetReviewForm()
+  reviewError.value = ''
 }
 
 watch(
   () => carer.value?.id,
   () => {
-    userRating.value = null
     reviewSubmitted.value = false
     reviewError.value = ''
+    ratingTrigger.value = 0
+    reviewDialogVisible.value = false
+    resetReviewForm()
   },
 )
 
@@ -114,11 +167,72 @@ onMounted(() => {
       <section class="profile__review">
         <h2>Share your experience</h2>
         <p>Click on the stars below to rate {{ carer.name }}.</p>
-        <Rating v-model="userRating" :cancel="false" @update:modelValue="handleRating" />
+        <Rating v-model="ratingTrigger" :cancel="false" @update:modelValue="openReviewDialog" />
         <p v-if="reviewSubmitted" class="profile__thanks">
           Thank you! Your review has been added to {{ carer.name }}'s rating.
         </p>
-        <p v-else-if="reviewError" class="profile__error">{{ reviewError }}</p>
+        <p v-else-if="reviewError && !reviewDialogVisible" class="profile__error">
+          {{ reviewError }}
+        </p>
+      </section>
+
+      <Dialog
+        v-model:visible="reviewDialogVisible"
+        modal
+        :style="{ width: 'min(540px, 90vw)' }"
+        header="Share your experience"
+        @hide="handleDialogHide"
+      >
+        <div class="profile__dialog">
+          <p class="profile__dialog-text">How would you rate {{ carer.name }}?</p>
+          <Rating v-model="reviewForm.rating" :cancel="false" />
+          <label class="profile__dialog-label" for="review-comment">Tell us more</label>
+          <Textarea
+            id="review-comment"
+            v-model="reviewForm.comment"
+            autoResize
+            rows="4"
+            class="profile__dialog-textarea"
+            placeholder="Share a few words about your experience."
+          />
+          <p v-if="reviewError" class="profile__error">{{ reviewError }}</p>
+        </div>
+        <template #footer>
+          <div class="profile__dialog-actions">
+            <Button label="Cancel" severity="secondary" @click="reviewDialogVisible = false" />
+            <Button
+              label="Submit review"
+              :loading="reviewSubmitting"
+              :disabled="reviewSubmitting"
+              @click="submitReview"
+            />
+          </div>
+        </template>
+      </Dialog>
+
+      <section class="profile__testimonials">
+        <h2>What people say</h2>
+        <Carousel
+          v-if="showReviewCarousel"
+          :value="carerReviews"
+          :numVisible="1"
+          :numScroll="1"
+          :circular="carerReviews.length > 1"
+          :autoplayInterval="8000"
+        >
+          <template #item="{ data }">
+            <article class="profile__testimonial">
+              <Rating :modelValue="data.rating" readonly :cancel="false" />
+              <p v-if="data.comment" class="profile__testimonial-comment">{{ data.comment }}</p>
+              <p v-else class="profile__testimonial-comment profile__testimonial-comment--muted">
+                This reviewer left a rating without a comment.
+              </p>
+            </article>
+          </template>
+        </Carousel>
+        <p v-else class="profile__testimonial-empty">
+          There aren’t any reviews yet. Be the first to share your experience with {{ carer.name }}.
+        </p>
       </section>
     </div>
   </section>
@@ -215,6 +329,71 @@ onMounted(() => {
   padding: 1.5rem;
   border-radius: 1rem;
   background: rgba(59, 130, 246, 0.05);
+}
+
+.profile__dialog {
+  display: grid;
+  gap: 1rem;
+}
+
+.profile__dialog-text {
+  margin: 0;
+  color: var(--p-text-color);
+  font-weight: 600;
+}
+
+.profile__dialog-label {
+  font-weight: 600;
+  color: var(--p-text-color);
+}
+
+.profile__dialog-textarea {
+  width: 100%;
+}
+
+.profile__dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+}
+
+.profile__testimonials {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.profile__testimonials h2 {
+  margin: 0;
+}
+
+.profile__testimonial {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1.5rem;
+  border-radius: 1rem;
+  background: rgba(15, 23, 42, 0.04);
+  min-height: 160px;
+}
+
+.profile__testimonial :deep(.p-rating-icon) {
+  color: #f59e0b;
+}
+
+.profile__testimonial-comment {
+  margin: 0;
+  line-height: 1.6;
+  color: var(--p-text-color);
+}
+
+.profile__testimonial-comment--muted {
+  color: var(--p-text-muted-color);
+  font-style: italic;
+}
+
+.profile__testimonial-empty {
+  margin: 0;
+  line-height: 1.6;
+  color: var(--p-text-muted-color);
 }
 
 .profile__thanks {
