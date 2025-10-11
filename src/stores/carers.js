@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { collection, getDocs, query, where } from 'firebase/firestore'
+import { collection, doc, getDocs, query, updateDoc, where, arrayUnion } from 'firebase/firestore'
 
 import { db } from '@/firebase'
 
@@ -202,17 +202,41 @@ export const useCarersStore = defineStore('carers', {
         this.hasLoaded = true
       }
     },
-    addReview(id, rating) {
+    async addReview(id, rating) {
       const carer = this.carers.find((item) => item.id === id)
-      if (!carer) return
+      if (!carer) return false
 
       const normalisedRating = normaliseRating(rating)
-      if (normalisedRating === null) return
-      if (!Array.isArray(carer.reviews)) {
-        carer.reviews = []
+      if (normalisedRating === null) return false
+
+      const ensureReviewArray = () => {
+        if (!Array.isArray(carer.reviews)) {
+          carer.reviews = []
+        }
       }
 
+      if (!db) {
+        if (import.meta.env.DEV) {
+          console.warn('Firebase has not been initialised. Review stored locally only.')
+        }
+        ensureReviewArray()
+        carer.reviews.push(normalisedRating)
+        return true
+      }
+
+      try {
+        const carerRef = doc(db, 'users', id)
+        await updateDoc(carerRef, {
+          reviews: arrayUnion(normalisedRating),
+        })
+      } catch (error) {
+        console.error('Failed to record review in Firestore', error)
+        return false
+      }
+
+      ensureReviewArray()
       carer.reviews.push(normalisedRating)
+      return true
     },
     getDescription(id) {
       const carer = this.carers.find((item) => item.id === id)

@@ -13,6 +13,7 @@ const carersStore = useCarersStore()
 const carerId = computed(() => route.params.id)
 const userRating = ref(null)
 const reviewSubmitted = ref(false)
+const reviewError = ref('')
 
 const carer = computed(() => carersStore.getCarerById(carerId.value))
 const isLoading = computed(() => carersStore.loading)
@@ -43,11 +44,17 @@ const reviewCount = computed(() => {
   return carersStore.getReviewCount(carer.value.id)
 })
 
-const handleRating = (value) => {
+const handleRating = async (value) => {
   if (!carer.value) return
-  carersStore.addReview(carer.value.id, value)
-  userRating.value = value
-  reviewSubmitted.value = true
+  reviewError.value = ''
+  const success = await carersStore.addReview(carer.value.id, value)
+  if (success) {
+    userRating.value = value
+    reviewSubmitted.value = true
+  } else {
+    reviewError.value = 'We were unable to save your review. Please try again.'
+    userRating.value = null
+  }
 }
 
 watch(
@@ -55,6 +62,7 @@ watch(
   () => {
     userRating.value = null
     reviewSubmitted.value = false
+    reviewError.value = ''
   },
 )
 
@@ -109,6 +117,7 @@ onMounted(() => {
         <p v-if="reviewSubmitted" class="profile__thanks">
           Thank you! Your review has been added to {{ carer.name }}'s rating.
         </p>
+        <p v-else-if="reviewError" class="profile__error">{{ reviewError }}</p>
       </section>
     </div>
   </section>
@@ -193,6 +202,10 @@ onMounted(() => {
   margin: 0;
   line-height: 1.6;
   color: var(--p-text-muted-color);
+}
+
+.profile__error {
+  color: var(--p-red-500);
 }
 
 .profile__review {
