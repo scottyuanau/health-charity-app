@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import Rating from 'primevue/rating'
 import Button from 'primevue/button'
 import { doc, getDoc } from 'firebase/firestore'
@@ -308,7 +308,11 @@ const initialiseMap = async () => {
   }
 
   if (!mapContainerRef.value) {
-    mapError.value = 'The map could not be initialised because the container is missing.'
+    await nextTick()
+  }
+
+  if (!mapContainerRef.value) {
+    mapError.value = 'The map could not be initialised because the container failed to render.'
     mapLoading.value = false
     return
   }
@@ -653,11 +657,11 @@ onUnmounted(() => {
       </aside>
 
       <div class="find-support__map-wrapper">
-        <div v-if="mapLoading" class="find-support__map-status">Preparing the map&hellip;</div>
-        <div v-else-if="mapError" class="find-support__map-status find-support__map-status--error">
+        <div class="find-support__map" ref="mapContainerRef"></div>
+        <div v-if="mapLoading" class="find-support__map-overlay">Preparing the map&hellip;</div>
+        <div v-else-if="mapError" class="find-support__map-overlay find-support__map-overlay--error">
           {{ mapError }}
         </div>
-        <div v-else class="find-support__map" ref="mapContainerRef"></div>
         <div v-if="mapStatusMessage" class="find-support__map-message">{{ mapStatusMessage }}</div>
       </div>
     </div>
@@ -839,12 +843,12 @@ onUnmounted(() => {
   border-radius: 1rem;
   overflow: hidden;
   box-shadow: 0 16px 32px rgba(15, 23, 42, 0.12);
+  background: rgba(37, 99, 235, 0.08);
 }
 
-.find-support__map-status {
-  width: 100%;
-  height: 100%;
-  min-height: 520px;
+.find-support__map-overlay {
+  position: absolute;
+  inset: 0;
   display: grid;
   place-items: center;
   border-radius: 1rem;
@@ -853,9 +857,10 @@ onUnmounted(() => {
   text-align: center;
   padding: 1.5rem;
   font-weight: 600;
+  z-index: 2;
 }
 
-.find-support__map-status--error {
+.find-support__map-overlay--error {
   background: rgba(239, 68, 68, 0.08);
   color: #b91c1c;
 }
@@ -869,6 +874,7 @@ onUnmounted(() => {
   border-radius: 0.75rem;
   font-size: 0.9rem;
   box-shadow: 0 12px 24px rgba(15, 23, 42, 0.28);
+  z-index: 3;
 }
 
 .find-support__popup {
@@ -901,8 +907,7 @@ onUnmounted(() => {
     min-height: 420px;
   }
 
-  .find-support__map,
-  .find-support__map-status {
+  .find-support__map {
     min-height: 420px;
   }
 }
@@ -916,8 +921,7 @@ onUnmounted(() => {
     min-height: 360px;
   }
 
-  .find-support__map,
-  .find-support__map-status {
+  .find-support__map {
     min-height: 360px;
   }
 }
