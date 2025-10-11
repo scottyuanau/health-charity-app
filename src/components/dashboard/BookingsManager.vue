@@ -202,7 +202,7 @@ const parseAvailability = (entries) => {
     if (!item) return
     const dateKey = toDateKey(item.date)
     if (!dateKey) return
-    if (Boolean(item.available)) {
+    if (item.available) {
       availableDates.add(dateKey)
     }
   })

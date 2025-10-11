@@ -6,6 +6,7 @@ import TabPanel from 'primevue/tabpanel'
 import AvailabilityManager from '@/components/dashboard/AvailabilityManager.vue'
 import BookingsManager from '@/components/dashboard/BookingsManager.vue'
 import DonationHistory from '@/components/dashboard/DonationHistory.vue'
+import BillingManager from '@/components/dashboard/BillingManager.vue'
 
 import { useAuth } from '@/composables/auth'
 
@@ -42,7 +43,9 @@ const username = computed(() => {
       <TabPanel header="Donation History">
         <DonationHistory />
       </TabPanel>
-      <TabPanel header="Billing" />
+      <TabPanel header="Billing">
+        <BillingManager />
+      </TabPanel>
       <TabPanel header="Message" />
       <TabPanel header="Settings" />
       <TabPanel header="Admin" />

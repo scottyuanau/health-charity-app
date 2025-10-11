@@ -426,7 +426,7 @@ const addressRules = (value) => {
   }
 
   // Allow letters, numbers, spaces, commas, periods, hyphens, slashes, and apostrophes
-  if (!/^[a-zA-Z0-9\s,.'\/-]+$/.test(normalized)) {
+  if (!/^[a-zA-Z0-9\s,.'/-]+$/.test(normalized)) {
     return 'Address may only contain letters, numbers, spaces, commas, periods, hyphens, slashes, and apostrophes.'
   }
 
