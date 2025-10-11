@@ -23,6 +23,7 @@ import {
 
 import { db } from '../firebase'
 import { useAuth } from '../composables/auth'
+import logoImage from '../assets/logo.png'
 
 const router = useRouter()
 const { state, logout, isAuthenticated: authStatus } = useAuth()
@@ -513,7 +514,11 @@ watch(
             class="navbar-brand fw-semibold text-decoration-none text-body"
             to="/"
           >
-            Health Charity
+            <img
+              :src="logoImage"
+              alt="Health Charity"
+              class="navbar-brand__logo"
+            />
           </RouterLink>
         </template>
         <template #end>
@@ -733,6 +738,12 @@ watch(
 </template>
 
 <style scoped>
+.navbar-brand__logo {
+  height: 40px;
+  width: auto;
+  display: block;
+}
+
 :deep(.p-menubar) {
   width: 100%;
 }
