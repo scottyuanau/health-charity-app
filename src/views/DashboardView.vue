@@ -9,6 +9,7 @@ import DonationHistory from '@/components/dashboard/DonationHistory.vue'
 import BillingManager from '@/components/dashboard/BillingManager.vue'
 import MessagingCenter from '@/components/dashboard/MessagingCenter.vue'
 import SettingsManager from '@/components/dashboard/SettingsManager.vue'
+import AdminUserManager from '@/components/dashboard/AdminUserManager.vue'
 
 import { useAuth } from '@/composables/auth'
 
@@ -54,7 +55,9 @@ const username = computed(() => {
       <TabPanel header="Settings">
         <SettingsManager />
       </TabPanel>
-      <TabPanel header="Admin" />
+      <TabPanel header="Admin">
+        <AdminUserManager />
+      </TabPanel>
     </TabView>
   </section>
 </template>
