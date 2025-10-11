@@ -499,6 +499,10 @@ const handleDonationSubmit = async () => {
 onMounted(() => {
   document.addEventListener('click', handleDocumentClick)
 
+  if (typeof window !== 'undefined') {
+    window.addEventListener('open-donation-dialog', openDonationDialog)
+  }
+
   if (hasFirebaseAccess.value) {
     loadUserProfile()
   }
@@ -508,6 +512,10 @@ onMounted(() => {
 
 onUnmounted(() => {
   document.removeEventListener('click', handleDocumentClick)
+
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('open-donation-dialog', openDonationDialog)
+  }
 
   if (typeof unsubscribeFromNotifications.value === 'function') {
     unsubscribeFromNotifications.value()
