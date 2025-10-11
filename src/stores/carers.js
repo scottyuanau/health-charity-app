@@ -1,5 +1,15 @@
 import { defineStore } from 'pinia'
-import { collection, doc, getDocs, query, updateDoc, where, arrayUnion } from 'firebase/firestore'
+import {
+  addDoc,
+  arrayUnion,
+  collection,
+  doc,
+  getDocs,
+  query,
+  serverTimestamp,
+  updateDoc,
+  where,
+} from 'firebase/firestore'
 
 import { db } from '@/firebase'
 
@@ -192,7 +202,9 @@ export const useCarersStore = defineStore('carers', {
       try {
         const carersQuery = query(collection(db, 'users'), where('roles', 'array-contains', 'carer'))
         const snapshot = await getDocs(carersQuery)
-        this.carers = snapshot.docs.map((doc) => transformCarerRecord(doc))
+        const carers = snapshot.docs.map((doc) => transformCarerRecord(doc))
+
+        this.carers = await this.enrichWithReviews(carers)
       } catch (error) {
         console.error('Failed to load carers', error)
         this.carers = []
@@ -201,6 +213,80 @@ export const useCarersStore = defineStore('carers', {
         this.loading = false
         this.hasLoaded = true
       }
+    },
+    async enrichWithReviews(carers) {
+      if (!Array.isArray(carers) || carers.length === 0) {
+        return []
+      }
+
+      if (!db) {
+        return carers
+      }
+
+      const carerIds = carers.map((carer) => carer.id).filter(Boolean)
+      if (carerIds.length === 0) {
+        return carers
+      }
+
+      const reviewsByCarer = new Map()
+
+      const chunkSize = 10
+      const reviewCollection = collection(db, 'reviews')
+      const reviewQueries = []
+
+      for (let index = 0; index < carerIds.length; index += chunkSize) {
+        const chunk = carerIds.slice(index, index + chunkSize)
+        if (chunk.length === 0) continue
+        reviewQueries.push(getDocs(query(reviewCollection, where('carerId', 'in', chunk))))
+      }
+
+      if (reviewQueries.length === 0) {
+        return carers
+      }
+
+      try {
+        const reviewSnapshots = await Promise.all(reviewQueries)
+
+        reviewSnapshots.forEach((snapshot) => {
+          snapshot.docs.forEach((docSnapshot) => {
+            const data = docSnapshot.data() || {}
+
+            let carerId = ''
+            if (typeof data.carerId === 'string') {
+              carerId = data.carerId.trim()
+            } else {
+              const fallback = docSnapshot.get('carerId')
+              if (typeof fallback === 'string') {
+                carerId = fallback.trim()
+              } else if (fallback !== undefined && fallback !== null) {
+                carerId = String(fallback)
+              }
+            }
+
+            if (!carerId) return
+
+            if (!reviewsByCarer.has(carerId)) {
+              reviewsByCarer.set(carerId, [])
+            }
+
+            reviewsByCarer.get(carerId).push(data)
+          })
+        })
+      } catch (error) {
+        console.error('Failed to load carer reviews', error)
+      }
+
+      return carers.map((carer) => {
+        const existingReviews = Array.isArray(carer.reviews) ? carer.reviews : []
+        const fetchedReviews = reviewsByCarer.get(carer.id) || []
+
+        const combined = extractRatings([...existingReviews, ...fetchedReviews])
+
+        return {
+          ...carer,
+          reviews: combined,
+        }
+      })
     },
     async addReview(id, rating) {
       const carer = this.carers.find((item) => item.id === id)
@@ -224,13 +310,30 @@ export const useCarersStore = defineStore('carers', {
         return true
       }
 
+      let reviewPersisted = false
+
       try {
         const carerRef = doc(db, 'users', id)
         await updateDoc(carerRef, {
           reviews: arrayUnion(normalisedRating),
         })
+        reviewPersisted = true
       } catch (error) {
-        console.error('Failed to record review in Firestore', error)
+        console.error('Failed to record review in user profile', error)
+      }
+
+      try {
+        await addDoc(collection(db, 'reviews'), {
+          carerId: id,
+          rating: normalisedRating,
+          createdAt: serverTimestamp(),
+        })
+        reviewPersisted = true
+      } catch (error) {
+        console.error('Failed to record review in reviews collection', error)
+      }
+
+      if (!reviewPersisted) {
         return false
       }
 
