@@ -28,6 +28,51 @@ const carersWithLocations = computed(() =>
   ),
 )
 
+const carerSummaries = computed(() =>
+  carers.value.map((carer) => {
+    const reviewCount = carersStore.getReviewCount(carer.id)
+    const averageRating = carersStore.getAverageRating(carer.id)
+
+    let locationLabel = ''
+    if (typeof carer.address === 'string' && carer.address.trim()) {
+      locationLabel = carer.address.trim()
+    } else if (
+      carer.location &&
+      Number.isFinite(carer.location.lat) &&
+      Number.isFinite(carer.location.lng)
+    ) {
+      const lat = carer.location.lat.toFixed(3)
+      const lng = carer.location.lng.toFixed(3)
+      locationLabel = `Lat: ${lat}, Lng: ${lng}`
+    } else {
+      locationLabel = 'Location unavailable'
+    }
+
+    return {
+      ...carer,
+      reviewCount,
+      averageRating: Number.isFinite(averageRating) ? averageRating : null,
+      locationLabel,
+    }
+  }),
+)
+
+const describeReviewSummary = (carer) => {
+  if (!carer) {
+    return 'No reviews yet'
+  }
+
+  if (carer.reviewCount > 0 && Number.isFinite(carer.averageRating)) {
+    const roundedAverage = carer.averageRating.toFixed(1)
+    const reviewWord = carer.reviewCount === 1 ? 'review' : 'reviews'
+    return `${roundedAverage} out of 5 (${carer.reviewCount} ${reviewWord})`
+  }
+
+  return 'No reviews yet'
+}
+
+const isCarerSelected = (carerId) => selectedCarerId.value === carerId
+
 const selectedCarer = computed(() => {
   if (!selectedCarerId.value) return null
   return carersStore.getCarerById(selectedCarerId.value)
@@ -282,6 +327,28 @@ const refreshCarerMarkers = () => {
   if (!hasCenteredOnCarers && carersWithLocations.value.length > 0) {
     fitMapToVisibleLocations({ includeUser: Boolean(userLocation.value) })
     hasCenteredOnCarers = true
+  }
+}
+
+const handleShowOnMap = (carerId) => {
+  if (!carerId || !mapInstance.value) {
+    return
+  }
+
+  selectedCarerId.value = carerId
+  directionsError.value = ''
+
+  const marker = markerInstances.get(carerId)
+  const carer = carersStore.getCarerById(carerId)
+
+  if (marker) {
+    const position = marker.getPosition()
+    if (position) {
+      mapInstance.value.panTo(position)
+    }
+    if (carer) {
+      openInfoWindow(carer, marker)
+    }
   }
 }
 
@@ -597,7 +664,33 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <div v-if="!carersWithLocations.length && !carersStore.loading" class="support-map__status">
+    <div v-if="carerSummaries.length" class="support-map__carers">
+      <h2 class="support-map__carers-title">Carers</h2>
+      <ul class="support-map__carers-list">
+        <li
+          v-for="carer in carerSummaries"
+          :key="carer.id"
+          class="support-map__carer"
+          :class="{ 'support-map__carer--selected': isCarerSelected(carer.id) }"
+        >
+          <RouterLink
+            :to="{ name: 'carer-profile', params: { id: carer.id } }"
+            class="support-map__carer-link"
+            @mouseenter="selectedCarerId = carer.id"
+            @focus="selectedCarerId = carer.id"
+          >
+            <span class="support-map__carer-name">{{ carer.name || 'Carer' }}</span>
+            <span class="support-map__carer-review">{{ describeReviewSummary(carer) }}</span>
+            <span class="support-map__carer-location">{{ carer.locationLabel }}</span>
+          </RouterLink>
+          <button type="button" class="support-map__carer-action" @click="handleShowOnMap(carer.id)">
+            Show on map
+          </button>
+        </li>
+      </ul>
+    </div>
+
+    <div v-else-if="!carersWithLocations.length && !carersStore.loading" class="support-map__status">
       We could not find carers with map locations. Please check back soon.
     </div>
   </section>
@@ -755,6 +848,88 @@ onUnmounted(() => {
   color: #b91c1c;
 }
 
+.support-map__carers {
+  display: grid;
+  gap: 1rem;
+}
+
+.support-map__carers-title {
+  margin: 0;
+  font-size: clamp(1.5rem, 3vw, 2rem);
+}
+
+.support-map__carers-list {
+  list-style: none;
+  display: grid;
+  gap: 1rem;
+  padding: 0;
+  margin: 0;
+}
+
+.support-map__carer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  background: var(--p-surface-card);
+  border-radius: 1rem;
+  padding: 1.25rem;
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.support-map__carer--selected {
+  border-color: rgba(37, 99, 235, 0.45);
+  box-shadow: 0 16px 28px rgba(37, 99, 235, 0.18);
+  transform: translateY(-1px);
+}
+
+.support-map__carer-link {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+  flex: 1 1 18rem;
+  text-decoration: none;
+  color: inherit;
+}
+
+.support-map__carer-link:hover .support-map__carer-name,
+.support-map__carer-link:focus-visible .support-map__carer-name {
+  color: #2563eb;
+}
+
+.support-map__carer-name {
+  font-size: 1.15rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.support-map__carer-review,
+.support-map__carer-location {
+  margin: 0;
+  color: var(--p-text-muted-color);
+  font-size: 0.95rem;
+}
+
+.support-map__carer-action {
+  border: none;
+  border-radius: 999px;
+  padding: 0.65rem 1.35rem;
+  font-weight: 600;
+  cursor: pointer;
+  background: rgba(37, 99, 235, 0.12);
+  color: #1d4ed8;
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+
+.support-map__carer-action:hover,
+.support-map__carer-action:focus-visible {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 20px rgba(37, 99, 235, 0.2);
+}
+
 .map-infowindow {
   display: grid;
   gap: 0.25rem;
@@ -790,6 +965,15 @@ onUnmounted(() => {
   .support-map__clear-button {
     width: 100%;
     justify-content: center;
+  }
+
+  .support-map__carer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .support-map__carer-action {
+    width: 100%;
   }
 }
 </style> 
