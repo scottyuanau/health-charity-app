@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { doc, getDoc } from 'firebase/firestore'
 
 import { loadGoogleMaps } from '@/composables/googleMaps'
@@ -302,12 +302,7 @@ const refreshCarerMarkers = () => {
       })
 
       marker.addListener('click', () => {
-        selectedCarerId.value = id
-        directionsError.value = ''
-        if (directionsRenderer) {
-          directionsRenderer.set('directions', null)
-        }
-        openInfoWindow(carer, marker)
+        handleSelectCarer(id)
       })
 
       markerInstances.set(id, marker)
@@ -330,13 +325,10 @@ const refreshCarerMarkers = () => {
   }
 }
 
-const handleShowOnMap = (carerId) => {
+const focusCarerOnMap = (carerId) => {
   if (!carerId || !mapInstance.value) {
     return
   }
-
-  selectedCarerId.value = carerId
-  directionsError.value = ''
 
   const marker = markerInstances.get(carerId)
   const carer = carersStore.getCarerById(carerId)
@@ -350,6 +342,28 @@ const handleShowOnMap = (carerId) => {
       openInfoWindow(carer, marker)
     }
   }
+}
+
+const handleSelectCarer = async (carerId) => {
+  if (!carerId) {
+    return
+  }
+
+  selectedCarerId.value = carerId
+  directionsError.value = ''
+
+  if (!userLocation.value) {
+    try {
+      await locateUser({ force: false })
+    } catch {
+      // locateUser already updates the UI with a helpful error message when it fails.
+    }
+  }
+
+  focusCarerOnMap(carerId)
+  clearDirections()
+  await nextTick()
+  handleGetDirections()
 }
 
 const initialiseDirections = () => {
@@ -473,7 +487,8 @@ const handleGetDirections = async () => {
     return
   }
 
-  const origin = userAddress.value?.trim() ? userAddress.value.trim() : userLocation.value
+  const origin =
+    userLocation.value || (userAddress.value?.trim() ? userAddress.value.trim() : null)
   const destinationAddress = selectedCarer.value.address?.trim()
   const destination = destinationAddress && destinationAddress.length > 0
     ? destinationAddress
@@ -518,6 +533,16 @@ const handleGetDirections = async () => {
 const clearDirections = () => {
   if (directionsRenderer) {
     directionsRenderer.set('directions', null)
+  }
+}
+
+const clearSelectedCarer = () => {
+  selectedCarerId.value = ''
+  directionsError.value = ''
+  clearDirections()
+
+  if (infoWindowInstance) {
+    infoWindowInstance.close()
   }
 }
 
@@ -604,94 +629,97 @@ onUnmounted(() => {
       </p>
     </header>
 
-    <div class="support-map__map-wrapper" :class="{ 'support-map__map-wrapper--loading': mapLoading }">
-      <div ref="mapElementRef" class="support-map__map" role="presentation">
-        <div v-if="mapLoading" class="support-map__map-loading">
-          <span>Loading map&hellip;</span>
+    <div class="support-map__content">
+      <aside class="support-map__sidebar">
+        <div v-if="locationLoading" class="support-map__status">
+          Determining your location&hellip;
         </div>
-      </div>
-    </div>
-
-    <div v-if="mapError" class="support-map__status support-map__status--error">
-      {{ mapError }}
-    </div>
-
-    <div v-else class="support-map__panel">
-      <div v-if="locationLoading" class="support-map__status">
-        Determining your location&hellip;
-      </div>
-      <div v-else-if="locationError" class="support-map__status support-map__status--warning">
-        {{ locationError }}
-      </div>
-      <div v-else-if="userAddress" class="support-map__status support-map__status--success">
-        Using your saved address to calculate directions.
-      </div>
-      <div v-else-if="userLocation" class="support-map__status support-map__status--success">
-        Showing your current location on the map.
-      </div>
-
-      <div v-if="selectedCarer" class="support-map__selection">
-        <h2>{{ selectedCarer.name }}</h2>
-        <p v-if="selectedCarer.address" class="support-map__selection-address">
-          {{ selectedCarer.address }}
-        </p>
-        <p v-if="selectedCarerRating && selectedCarerRating.count > 0" class="support-map__selection-rating">
-          Average rating: {{ selectedCarerRating.average?.toFixed(1) }}
-          ({{ selectedCarerRating.count }} review{{ selectedCarerRating.count === 1 ? '' : 's' }})
-        </p>
-        <p v-else class="support-map__selection-rating">No reviews yet.</p>
-
-        <div class="support-map__actions">
-          <button
-            type="button"
-            class="support-map__directions-button"
-            :disabled="directionsLoading"
-            @click="handleGetDirections"
-          >
-            {{ directionsLoading ? 'Calculating directions…' : 'Get directions' }}
-          </button>
-          <button type="button" class="support-map__clear-button" @click="selectedCarerId = ''">
-            Clear selection
-          </button>
+        <div v-else-if="locationError" class="support-map__status support-map__status--warning">
+          {{ locationError }}
+        </div>
+        <div v-else-if="userLocation" class="support-map__status support-map__status--success">
+          Showing your current location on the map.
+        </div>
+        <div v-else-if="userAddress" class="support-map__status support-map__status--success">
+          Using your saved address to calculate directions.
         </div>
 
-        <p v-if="directionsError" class="support-map__status support-map__status--error">
-          {{ directionsError }}
-        </p>
-      </div>
-      <div v-else class="support-map__prompt">
-        Select a carer on the map to view details and get directions.
-      </div>
-    </div>
+        <div v-if="selectedCarer" class="support-map__selection">
+          <h2>{{ selectedCarer.name }}</h2>
+          <p v-if="selectedCarer.address" class="support-map__selection-address">
+            {{ selectedCarer.address }}
+          </p>
+          <p v-if="selectedCarerRating && selectedCarerRating.count > 0" class="support-map__selection-rating">
+            Average rating: {{ selectedCarerRating.average?.toFixed(1) }}
+            ({{ selectedCarerRating.count }} review{{ selectedCarerRating.count === 1 ? '' : 's' }})
+          </p>
+          <p v-else class="support-map__selection-rating">No reviews yet.</p>
 
-    <div v-if="carerSummaries.length" class="support-map__carers">
-      <h2 class="support-map__carers-title">Carers</h2>
-      <ul class="support-map__carers-list">
-        <li
-          v-for="carer in carerSummaries"
-          :key="carer.id"
-          class="support-map__carer"
-          :class="{ 'support-map__carer--selected': isCarerSelected(carer.id) }"
-        >
-          <RouterLink
-            :to="{ name: 'carer-profile', params: { id: carer.id } }"
-            class="support-map__carer-link"
-            @mouseenter="selectedCarerId = carer.id"
-            @focus="selectedCarerId = carer.id"
-          >
-            <span class="support-map__carer-name">{{ carer.name || 'Carer' }}</span>
-            <span class="support-map__carer-review">{{ describeReviewSummary(carer) }}</span>
-            <span class="support-map__carer-location">{{ carer.locationLabel }}</span>
-          </RouterLink>
-          <button type="button" class="support-map__carer-action" @click="handleShowOnMap(carer.id)">
-            Show on map
-          </button>
-        </li>
-      </ul>
-    </div>
+          <div class="support-map__actions">
+            <button
+              type="button"
+              class="support-map__clear-button"
+              :disabled="directionsLoading"
+              @click="clearSelectedCarer"
+            >
+              {{ directionsLoading ? 'Calculating directions…' : 'Clear selection' }}
+            </button>
+          </div>
 
-    <div v-else-if="!carersWithLocations.length && !carersStore.loading" class="support-map__status">
-      We could not find carers with map locations. Please check back soon.
+          <p v-if="directionsError" class="support-map__status support-map__status--error">
+            {{ directionsError }}
+          </p>
+        </div>
+        <div v-else class="support-map__prompt">
+          Choose a carer to automatically calculate directions from your location.
+        </div>
+
+        <div v-if="carerSummaries.length" class="support-map__carers">
+          <h2 class="support-map__carers-title">Carers</h2>
+          <ul class="support-map__carers-list">
+            <li
+              v-for="carer in carerSummaries"
+              :key="carer.id"
+              class="support-map__carer"
+              :class="{ 'support-map__carer--selected': isCarerSelected(carer.id) }"
+            >
+              <button
+                type="button"
+                class="support-map__carer-select"
+                @click="handleSelectCarer(carer.id)"
+                :aria-pressed="isCarerSelected(carer.id)"
+              >
+                <span class="support-map__carer-name">{{ carer.name || 'Carer' }}</span>
+                <span class="support-map__carer-review">{{ describeReviewSummary(carer) }}</span>
+                <span class="support-map__carer-location">{{ carer.locationLabel }}</span>
+              </button>
+              <RouterLink
+                :to="{ name: 'carer-profile', params: { id: carer.id } }"
+                class="support-map__carer-profile"
+              >
+                View profile
+              </RouterLink>
+            </li>
+          </ul>
+        </div>
+
+        <div v-else-if="!carersWithLocations.length && !carersStore.loading" class="support-map__status">
+          We could not find carers with map locations. Please check back soon.
+        </div>
+      </aside>
+
+      <div class="support-map__map-area">
+        <div class="support-map__map-wrapper" :class="{ 'support-map__map-wrapper--loading': mapLoading }">
+          <div ref="mapElementRef" class="support-map__map" role="presentation">
+            <div v-if="mapLoading" class="support-map__map-loading">
+              <span>Loading map&hellip;</span>
+            </div>
+          </div>
+        </div>
+        <div v-if="mapError" class="support-map__status support-map__status--error support-map__map-status">
+          {{ mapError }}
+        </div>
+      </div>
     </div>
   </section>
 </template>
@@ -717,6 +745,27 @@ onUnmounted(() => {
   margin: 0 auto;
   max-width: 48rem;
   color: var(--p-text-muted-color);
+}
+
+.support-map__content {
+  display: grid;
+  gap: 2rem;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr);
+  align-items: start;
+}
+
+.support-map__sidebar {
+  background: var(--p-surface-card);
+  border-radius: 1.25rem;
+  padding: 1.75rem;
+  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.1);
+  display: grid;
+  gap: 1.5rem;
+}
+
+.support-map__map-area {
+  display: grid;
+  gap: 1rem;
 }
 
 .support-map__map-wrapper {
@@ -750,15 +799,6 @@ onUnmounted(() => {
   font-weight: 600;
 }
 
-.support-map__panel {
-  background: var(--p-surface-card);
-  border-radius: 1.25rem;
-  padding: 1.75rem;
-  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.1);
-  display: grid;
-  gap: 1.25rem;
-}
-
 .support-map__selection {
   display: grid;
   gap: 0.75rem;
@@ -784,39 +824,27 @@ onUnmounted(() => {
   gap: 0.75rem;
 }
 
-.support-map__directions-button,
 .support-map__clear-button {
   border: none;
   border-radius: 999px;
   padding: 0.75rem 1.5rem;
   font-weight: 600;
   cursor: pointer;
-  transition: transform 160ms ease, box-shadow 160ms ease;
-}
-
-.support-map__directions-button {
-  background: linear-gradient(135deg, #2563eb, #3b82f6);
-  color: #fff;
-  box-shadow: 0 10px 20px rgba(37, 99, 235, 0.2);
-}
-
-.support-map__directions-button:disabled {
-  opacity: 0.7;
-  cursor: progress;
-  box-shadow: none;
-}
-
-.support-map__directions-button:not(:disabled):hover {
-  transform: translateY(-1px);
-  box-shadow: 0 14px 26px rgba(37, 99, 235, 0.25);
-}
-
-.support-map__clear-button {
   background: rgba(148, 163, 184, 0.2);
   color: var(--p-text-color);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 160ms ease, box-shadow 160ms ease, opacity 160ms ease;
 }
 
-.support-map__clear-button:hover {
+.support-map__clear-button:disabled {
+  opacity: 0.7;
+  cursor: progress;
+}
+
+.support-map__clear-button:not(:disabled):hover,
+.support-map__clear-button:not(:disabled):focus-visible {
   transform: translateY(-1px);
   box-shadow: 0 10px 20px rgba(148, 163, 184, 0.2);
 }
@@ -831,6 +859,10 @@ onUnmounted(() => {
   background: rgba(148, 163, 184, 0.12);
   color: var(--p-text-muted-color);
   margin: 0;
+}
+
+.support-map__map-status {
+  max-width: 36rem;
 }
 
 .support-map__status--success {
@@ -868,10 +900,9 @@ onUnmounted(() => {
 
 .support-map__carer {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.75rem;
   background: var(--p-surface-card);
   border-radius: 1rem;
   padding: 1.25rem;
@@ -884,20 +915,6 @@ onUnmounted(() => {
   border-color: rgba(37, 99, 235, 0.45);
   box-shadow: 0 16px 28px rgba(37, 99, 235, 0.18);
   transform: translateY(-1px);
-}
-
-.support-map__carer-link {
-  display: grid;
-  gap: 0.35rem;
-  min-width: 0;
-  flex: 1 1 18rem;
-  text-decoration: none;
-  color: inherit;
-}
-
-.support-map__carer-link:hover .support-map__carer-name,
-.support-map__carer-link:focus-visible .support-map__carer-name {
-  color: #2563eb;
 }
 
 .support-map__carer-name {
@@ -913,19 +930,43 @@ onUnmounted(() => {
   font-size: 0.95rem;
 }
 
-.support-map__carer-action {
+.support-map__carer-select {
   border: none;
-  border-radius: 999px;
-  padding: 0.65rem 1.35rem;
-  font-weight: 600;
+  background: none;
+  padding: 0;
+  margin: 0;
+  text-align: left;
   cursor: pointer;
-  background: rgba(37, 99, 235, 0.12);
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+  font: inherit;
+  color: inherit;
+}
+
+.support-map__carer-select:hover .support-map__carer-name,
+.support-map__carer-select:focus-visible .support-map__carer-name {
+  color: #2563eb;
+}
+
+.support-map__carer-select:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.35);
+  border-radius: 0.75rem;
+}
+
+.support-map__carer-profile {
+  align-self: flex-start;
+  text-decoration: none;
+  font-weight: 600;
   color: #1d4ed8;
+  background: rgba(37, 99, 235, 0.12);
+  border-radius: 999px;
+  padding: 0.5rem 1.25rem;
   transition: transform 160ms ease, box-shadow 160ms ease;
 }
 
-.support-map__carer-action:hover,
-.support-map__carer-action:focus-visible {
+.support-map__carer-profile:hover,
+.support-map__carer-profile:focus-visible {
   transform: translateY(-1px);
   box-shadow: 0 10px 20px rgba(37, 99, 235, 0.2);
 }
@@ -952,7 +993,11 @@ onUnmounted(() => {
 }
 
 @media (max-width: 768px) {
-  .support-map__panel {
+  .support-map__content {
+    grid-template-columns: 1fr;
+  }
+
+  .support-map__sidebar {
     padding: 1.25rem;
   }
 
@@ -961,19 +1006,9 @@ onUnmounted(() => {
     align-items: stretch;
   }
 
-  .support-map__directions-button,
   .support-map__clear-button {
     width: 100%;
     justify-content: center;
-  }
-
-  .support-map__carer {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .support-map__carer-action {
-    width: 100%;
   }
 }
 </style> 
