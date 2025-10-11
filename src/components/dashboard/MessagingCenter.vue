@@ -2,10 +2,10 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
-import Dropdown from 'primevue/dropdown'
 import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
 import Textarea from 'primevue/textarea'
+import MultiSelect from 'primevue/multiselect'
 import {
   addDoc,
   collection,
@@ -30,7 +30,7 @@ const profileError = ref('')
 const recipients = ref([])
 const recipientsLoading = ref(false)
 const recipientsError = ref('')
-const selectedRecipientId = ref(null)
+const selectedRecipientIds = ref([])
 
 const messageBody = ref('')
 const sendingMessage = ref(false)
@@ -127,11 +127,24 @@ const counterpartLabel = computed(() => {
   return 'Recipient'
 })
 
-const selectedRecipient = computed(() =>
-  recipients.value.find((recipient) => recipient.id === selectedRecipientId.value) || null,
+const counterpartLabelPlural = computed(() => {
+  if (counterpartRole.value === 'carer') return 'Carers'
+  if (counterpartRole.value === 'beneficiary') return 'Beneficiaries'
+  return 'Recipients'
+})
+
+const selectedRecipients = computed(() => {
+  const ids = new Set(selectedRecipientIds.value)
+  return recipients.value.filter((recipient) => ids.has(recipient.id))
+})
+
+const selectedRecipientsWithEmail = computed(() =>
+  selectedRecipients.value.filter((recipient) => Boolean(recipient.email)),
 )
 
-const selectedRecipientEmail = computed(() => selectedRecipient.value?.email || '')
+const selectedRecipientsMissingEmail = computed(() =>
+  selectedRecipients.value.filter((recipient) => !recipient.email),
+)
 
 const canSendInternalMessage = computed(
   () => hasFirebaseAccess.value && (isBeneficiary.value || isCarer.value),
@@ -314,8 +327,8 @@ const handleSendMessage = async () => {
   if (!db || !firebaseUser.value?.uid) return
 
   const trimmedBody = messageBody.value.trim()
-  if (!selectedRecipient.value) {
-    messageError.value = `Select a ${counterpartLabel.value.toLowerCase()} before sending.`
+  if (selectedRecipients.value.length === 0) {
+    messageError.value = `Select at least one ${counterpartLabel.value.toLowerCase()} before sending.`
     messageSuccess.value = ''
     return
   }
@@ -330,20 +343,27 @@ const handleSendMessage = async () => {
   messageSuccess.value = ''
 
   try {
-    await addDoc(collection(db, 'messages'), {
-      senderId: firebaseUser.value.uid,
-      senderName: senderDisplayName.value,
-      senderRoles: userRoles.value,
-      senderEmail: typeof state.user?.email === 'string' ? state.user.email : null,
-      recipientId: selectedRecipient.value.id,
-      recipientName: selectedRecipient.value.name,
-      recipientEmail: selectedRecipient.value.email || null,
-      recipientRole: counterpartRole.value,
-      body: trimmedBody,
-      createdAt: serverTimestamp(),
-    })
+    await Promise.all(
+      selectedRecipients.value.map((recipient) =>
+        addDoc(collection(db, 'messages'), {
+          senderId: firebaseUser.value.uid,
+          senderName: senderDisplayName.value,
+          senderRoles: userRoles.value,
+          senderEmail: typeof state.user?.email === 'string' ? state.user.email : null,
+          recipientId: recipient.id,
+          recipientName: recipient.name,
+          recipientEmail: recipient.email || null,
+          recipientRole: counterpartRole.value,
+          body: trimmedBody,
+          createdAt: serverTimestamp(),
+        }),
+      ),
+    )
 
-    messageSuccess.value = 'Message sent successfully.'
+    const recipientNames = selectedRecipients.value
+      .map((recipient) => recipient.name || counterpartLabel.value)
+      .join(', ')
+    messageSuccess.value = `Message sent to ${recipientNames}.`
     messageBody.value = ''
   } catch (error) {
     console.error('Failed to send message', error)
@@ -436,13 +456,17 @@ const toBase64Attachment = (file) =>
   })
 
 const handleSendEmail = async () => {
-  if (!selectedRecipient.value) {
-    emailError.value = `Select a ${counterpartLabel.value.toLowerCase()} before sending.`
+  if (selectedRecipients.value.length === 0) {
+    emailError.value = `Select at least one ${counterpartLabel.value.toLowerCase()} before sending.`
     emailSuccess.value = ''
     return
   }
-  if (!selectedRecipientEmail.value) {
-    emailError.value = 'The selected recipient does not have an email address.'
+
+  if (selectedRecipientsMissingEmail.value.length > 0) {
+    const missingNames = selectedRecipientsMissingEmail.value
+      .map((recipient) => recipient.name || counterpartLabel.value)
+      .join(', ')
+    emailError.value = `The following recipients do not have an email address: ${missingNames}.`
     emailSuccess.value = ''
     return
   }
@@ -472,41 +496,48 @@ const handleSendEmail = async () => {
       emailAttachments.value.map((file) => toBase64Attachment(file)),
     )
 
-    const response = await fetch(sendEmailEndpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        to: {
-          email: selectedRecipientEmail.value,
-          name: selectedRecipient.value.name,
-        },
-        from: {
-          email: configuredSenderEmail,
-          name: senderDisplayName.value,
-        },
-        subject: emailSubject.value.trim() || 'Message from Health Charity App',
-        text: emailBody.value.trim(),
-        html: emailBody.value.trim().replace(/\n/g, '<br />'),
-        attachments: attachments.filter((attachment) => attachment.content),
-      }),
-    })
+    const filteredAttachments = attachments.filter((attachment) => attachment.content)
+    const sentToNames = []
 
-    if (!response.ok) {
-      let errorMessage = 'Failed to send email.'
-      try {
-        const errorPayload = await response.json()
-        if (errorPayload?.error) {
-          errorMessage = errorPayload.error
+    for (const recipient of selectedRecipientsWithEmail.value) {
+      const response = await fetch(sendEmailEndpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          to: {
+            email: recipient.email,
+            name: recipient.name,
+          },
+          from: {
+            email: configuredSenderEmail,
+            name: senderDisplayName.value,
+          },
+          subject: emailSubject.value.trim() || 'Message from Health Charity App',
+          text: emailBody.value.trim(),
+          html: emailBody.value.trim().replace(/\n/g, '<br />'),
+          attachments: filteredAttachments,
+        }),
+      })
+
+      if (!response.ok) {
+        let errorMessage = 'Failed to send email.'
+        try {
+          const errorPayload = await response.json()
+          if (errorPayload?.error) {
+            errorMessage = errorPayload.error
+          }
+        } catch (parseError) {
+          console.warn('Unable to parse SendGrid error response', parseError)
         }
-      } catch (parseError) {
-        console.warn('Unable to parse SendGrid error response', parseError)
+        throw new Error(`${errorMessage} (${recipient.name || recipient.email}).`)
       }
-      throw new Error(errorMessage)
+
+      sentToNames.push(recipient.name || recipient.email)
     }
 
-    emailSuccess.value = 'Email sent successfully.'
+    emailSuccess.value = `Email sent to ${sentToNames.join(', ')}.`
     emailSubject.value = ''
     emailBody.value = ''
     emailAttachments.value = []
@@ -562,6 +593,7 @@ watch(
 )
 
 watch(counterpartRole, (role) => {
+  selectedRecipientIds.value = []
   if (role) {
     loadRecipients()
   } else {
@@ -569,18 +601,23 @@ watch(counterpartRole, (role) => {
   }
 })
 
-watch([messageBody, selectedRecipientId], () => {
+watch(recipients, (newRecipients) => {
+  const validIds = new Set(newRecipients.map((recipient) => recipient.id))
+  selectedRecipientIds.value = selectedRecipientIds.value.filter((id) => validIds.has(id))
+})
+
+watch([messageBody, selectedRecipientIds], () => {
   if (!sendingMessage.value) {
     resetMessageFeedback()
   }
-})
+}, { deep: true })
 
-watch([emailSubject, emailBody, emailAttachments], () => {
+watch([emailSubject, emailBody, emailAttachments, selectedRecipientIds], () => {
   if (!emailSending.value) {
     emailError.value = ''
     emailSuccess.value = ''
   }
-})
+}, { deep: true })
 
 onBeforeUnmount(() => {
   if (typeof unsubscribeFromMessages.value === 'function') {
@@ -618,18 +655,20 @@ onBeforeUnmount(() => {
 
         <div v-else class="messaging-center__content">
           <section class="messaging-center__section">
-            <h2 class="messaging-center__section-heading">Send a message to a {{ counterpartLabel.toLowerCase() }}</h2>
+            <h2 class="messaging-center__section-heading">Send a message to your {{ counterpartLabelPlural.toLowerCase() }}</h2>
 
             <div class="messaging-center__form">
-              <label class="messaging-center__label" for="recipient">Select {{ counterpartLabel }}</label>
-              <Dropdown
-                id="recipient"
-                v-model="selectedRecipientId"
-                :options="recipients.map((recipient) => ({ label: recipient.name, value: recipient.id }))"
+              <label class="messaging-center__label" for="recipients">Select {{ counterpartLabelPlural.toLowerCase() }}</label>
+              <MultiSelect
+                input-id="recipients"
+                v-model="selectedRecipientIds"
+                :options="recipients"
+                option-label="name"
+                option-value="id"
+                placeholder="Choose recipients"
+                display="chip"
+                filter
                 :loading="recipientsLoading"
-                option-label="label"
-                option-value="value"
-                placeholder="Choose a recipient"
                 class="messaging-center__dropdown"
               />
               <small v-if="recipientsError" class="messaging-center__hint messaging-center__hint--error">
@@ -673,7 +712,7 @@ onBeforeUnmount(() => {
             <div class="messaging-center__email">
               <h3 class="messaging-center__subheading">Prefer email?</h3>
               <p class="messaging-center__description">
-                Send an email with optional attachments to the selected {{ counterpartLabel.toLowerCase() }}.
+                Send an email with optional attachments to the selected {{ counterpartLabelPlural.toLowerCase() }}.
               </p>
 
               <label class="messaging-center__label" for="email-subject">Email subject</label>
