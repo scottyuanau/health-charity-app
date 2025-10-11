@@ -48,6 +48,10 @@ const menuItems = computed(() => {
       label: 'About',
       command: () => router.push({ name: 'about' }),
     },
+    {
+      label: 'Carers',
+      command: () => router.push({ name: 'carers' }),
+    },
   ]
 
   if (isAuthenticated.value) {
