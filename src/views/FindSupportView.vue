@@ -109,32 +109,48 @@ let userMarkerInstance = null
 let hasCenteredOnUser = false
 let hasCenteredOnCarers = false
 
-const fitMapToVisibleLocations = ({ includeUser = true } = {}) => {
-  if (!mapInstance.value || !googleMapsApi.value) {
-    return
-  }
+const MAX_OVERVIEW_ZOOM = 12; // 11–13 works well for “several suburbs”
+const FIT_PADDING = { top: 40, right: 40, bottom: 40, left: 320 }; // leave room for sidebar
 
-  const bounds = new googleMapsApi.value.LatLngBounds()
-  let hasVisibleLocations = false
+const fitMapToVisibleLocations = ({ includeUser = true } = {}) => {
+  if (!mapInstance.value || !googleMapsApi.value) return;
+
+  const bounds = new googleMapsApi.value.LatLngBounds();
+  let points = 0;
 
   carersWithLocations.value.forEach((carer) => {
-    if (!carer?.location) return
-
-    bounds.extend(carer.location)
-    hasVisibleLocations = true
-  })
+    if (!carer?.location) return;
+    bounds.extend(carer.location);
+    points++;
+  });
 
   if (includeUser && userLocation.value) {
-    bounds.extend(userLocation.value)
-    hasVisibleLocations = true
+    bounds.extend(userLocation.value);
+    points++;
   }
 
-  if (!hasVisibleLocations) {
-    return
+  if (!points) return;
+
+  // If only one point, artificially widen the bounds so we don’t zoom too far in
+  if (points === 1) {
+    const c = bounds.getCenter();
+    const dLat = 0.03; // ~3–4km in latitude
+    const dLng = 0.04; // ~3–4km in longitude around Sydney/Melbourne latitudes
+    bounds.extend({ lat: c.lat() + dLat, lng: c.lng() + dLng });
+    bounds.extend({ lat: c.lat() - dLat, lng: c.lng() - dLng });
   }
 
-  mapInstance.value.fitBounds(bounds)
-}
+  // Fit with padding
+  mapInstance.value.fitBounds(bounds, FIT_PADDING);
+
+  // After the map settles, cap the zoom so it doesn’t go in too tight
+  googleMapsApi.value.event.addListenerOnce(mapInstance.value, 'idle', () => {
+    const z = mapInstance.value.getZoom();
+    if (z > MAX_OVERVIEW_ZOOM) {
+      mapInstance.value.setZoom(MAX_OVERVIEW_ZOOM);
+    }
+  });
+};
 
 const escapeHtml = (value) => {
   if (typeof value !== 'string') {
