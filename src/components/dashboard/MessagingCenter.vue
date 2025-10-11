@@ -12,7 +12,6 @@ import {
   getDoc,
   getDocs,
   onSnapshot,
-  orderBy,
   query,
   serverTimestamp,
   where,
@@ -243,13 +242,12 @@ const subscribeToReceivedMessages = () => {
     const messagesQuery = query(
       collection(db, 'messages'),
       where('recipientId', '==', firebaseUser.value.uid),
-      orderBy('createdAt', 'desc'),
     )
 
     unsubscribeFromMessages.value = onSnapshot(
       messagesQuery,
       (snapshot) => {
-        receivedMessages.value = snapshot.docs.map((snapshotDoc) => {
+        const messages = snapshot.docs.map((snapshotDoc) => {
           const data = snapshotDoc.data()
           const createdAt = data?.createdAt?.toDate?.() || null
           return {
@@ -259,6 +257,13 @@ const subscribeToReceivedMessages = () => {
             sentAt: createdAt,
           }
         })
+
+        receivedMessages.value = messages.sort((a, b) => {
+          const timeA = a.sentAt?.getTime?.() ?? 0
+          const timeB = b.sentAt?.getTime?.() ?? 0
+          return timeB - timeA
+        })
+
         messagesLoading.value = false
       },
       (error) => {
