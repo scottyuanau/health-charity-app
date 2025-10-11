@@ -12,6 +12,7 @@ import {
 } from 'firebase/firestore'
 
 import { db } from '@/firebase'
+import { sanitizeMultilineText, sanitizeSingleLineText, sanitizeUrl } from '@/utils/sanitize'
 
 const descriptionPlaceholder = 'The carer is busy writing the introduction, come back later.'
 
@@ -68,7 +69,7 @@ const transformCarerRecord = (snapshotDoc) => {
     if (result) return result
     const value = data[field]
     if (typeof value === 'string' && value.trim()) {
-      return value.trim()
+      return sanitizeUrl(value)
     }
     return ''
   }, '')
@@ -78,15 +79,16 @@ const transformCarerRecord = (snapshotDoc) => {
     if (result) return result
     const value = data[field]
     if (typeof value === 'string' && value.trim()) {
-      return value.trim()
+      return sanitizeMultilineText(value, { maxLength: 1000 })
     }
     return ''
   }, '')
 
-  const username = typeof data?.username === 'string' ? data.username.trim() : ''
-  const email = typeof data?.email === 'string' ? data.email.trim() : ''
+  const username = sanitizeSingleLineText(data?.username, { maxLength: 120 })
+  const emailCandidate = sanitizeSingleLineText(data?.email, { maxLength: 255 })
+  const email = emailCandidate.includes('@') ? emailCandidate : ''
 
-  const address = typeof data?.address === 'string' ? data.address.trim() : ''
+  const address = sanitizeSingleLineText(data?.address, { maxLength: 255 })
 
   const extractCoordinates = (input, visited = new WeakSet()) => {
     if (!input) return null
@@ -235,9 +237,11 @@ const transformCarerRecord = (snapshotDoc) => {
     return extractCoordinates(candidate)
   }, null)
 
+  const derivedName = username || (email ? email.split('@')[0] || email : 'Carer')
+
   return {
     id: snapshotDoc.id,
-    name: username || (email ? email.split('@')[0] || email : 'Carer'),
+    name: sanitizeSingleLineText(derivedName, { maxLength: 120 }) || 'Carer',
     email,
     photo,
     description,
