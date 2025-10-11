@@ -128,26 +128,8 @@ const userRoles = computed(() => {
   return Array.isArray(roles) ? roles : []
 })
 
-const isBeneficiary = computed(() => userRoles.value.includes('beneficiary'))
-const isCarer = computed(() => userRoles.value.includes('carer'))
-
-const counterpartRole = computed(() => {
-  if (isBeneficiary.value) return 'carer'
-  if (isCarer.value) return 'beneficiary'
-  return null
-})
-
-const counterpartLabel = computed(() => {
-  if (counterpartRole.value === 'carer') return 'Carer'
-  if (counterpartRole.value === 'beneficiary') return 'Beneficiary'
-  return 'Recipient'
-})
-
-const counterpartLabelPlural = computed(() => {
-  if (counterpartRole.value === 'carer') return 'Carers'
-  if (counterpartRole.value === 'beneficiary') return 'Beneficiaries'
-  return 'Recipients'
-})
+const recipientLabel = computed(() => 'User')
+const recipientLabelPlural = computed(() => 'Users')
 
 const selectedRecipients = computed(() => {
   const ids = new Set(selectedRecipientIds.value)
@@ -234,9 +216,7 @@ const paginatedReceivedMessages = computed(() => {
   return filteredReceivedMessages.value.slice(startIndex, endIndex)
 })
 
-const canSendInternalMessage = computed(
-  () => hasFirebaseAccess.value && (isBeneficiary.value || isCarer.value),
-)
+const canSendInternalMessage = computed(() => hasFirebaseAccess.value)
 
 const openAiDialog = (target) => {
   aiTarget.value = target === 'email' ? 'email' : 'message'
@@ -370,7 +350,7 @@ const loadUserProfile = async () => {
 }
 
 const loadRecipients = async () => {
-  if (!db || !counterpartRole.value) {
+  if (!db || !firebaseUser.value?.uid) {
     recipients.value = []
     return
   }
@@ -379,12 +359,7 @@ const loadRecipients = async () => {
   recipientsError.value = ''
 
   try {
-    const recipientsQuery = query(
-      collection(db, 'users'),
-      where('roles', 'array-contains', counterpartRole.value),
-    )
-
-    const snapshot = await getDocs(recipientsQuery)
+    const snapshot = await getDocs(collection(db, 'users'))
 
     recipients.value = snapshot.docs.map((snapshotDoc) => {
       const data = snapshotDoc.data()
@@ -393,10 +368,10 @@ const loadRecipients = async () => {
 
       return {
         id: snapshotDoc.id,
-        name: username || email || counterpartLabel.value,
+        name: username || email || recipientLabel.value,
         email: email || '',
       }
-    })
+    }).filter((recipient) => recipient.id !== firebaseUser.value.uid)
   } catch (error) {
     console.error('Failed to load recipients', error)
     recipientsError.value = 'We were unable to load recipients. Please try again later.'
@@ -416,7 +391,7 @@ const handleSendMessage = async () => {
 
   const trimmedBody = messageBody.value.trim()
   if (selectedRecipients.value.length === 0) {
-    messageError.value = `Select at least one ${counterpartLabel.value.toLowerCase()} before sending.`
+    messageError.value = `Select at least one ${recipientLabel.value.toLowerCase()} before sending.`
     messageSuccess.value = ''
     return
   }
@@ -441,7 +416,7 @@ const handleSendMessage = async () => {
           recipientId: recipient.id,
           recipientName: recipient.name,
           recipientEmail: recipient.email || null,
-          recipientRole: counterpartRole.value,
+          recipientRole: 'user',
           body: trimmedBody,
           createdAt: serverTimestamp(),
         }),
@@ -449,7 +424,7 @@ const handleSendMessage = async () => {
     )
 
     const recipientNames = selectedRecipients.value
-      .map((recipient) => recipient.name || counterpartLabel.value)
+      .map((recipient) => recipient.name || recipientLabel.value)
       .join(', ')
     messageSuccess.value = `Message sent to ${recipientNames}.`
     messageBody.value = ''
@@ -661,14 +636,14 @@ const toBase64Attachment = (file) =>
 
 const handleSendEmail = async () => {
   if (selectedRecipients.value.length === 0) {
-    emailError.value = `Select at least one ${counterpartLabel.value.toLowerCase()} before sending.`
+    emailError.value = `Select at least one ${recipientLabel.value.toLowerCase()} before sending.`
     emailSuccess.value = ''
     return
   }
 
   if (selectedRecipientsMissingEmail.value.length > 0) {
     const missingNames = selectedRecipientsMissingEmail.value
-      .map((recipient) => recipient.name || counterpartLabel.value)
+      .map((recipient) => recipient.name || recipientLabel.value)
       .join(', ')
     emailError.value = `The following recipients do not have an email address: ${missingNames}.`
     emailSuccess.value = ''
@@ -763,6 +738,7 @@ onMounted(() => {
   if (hasFirebaseAccess.value) {
     loadUserProfile()
     subscribeToReceivedMessages()
+    loadRecipients()
   }
 })
 
@@ -783,11 +759,15 @@ watch(
     if (newUid && newUid !== oldUid) {
       loadUserProfile()
       subscribeToReceivedMessages()
+      loadRecipients()
+      selectedRecipientIds.value = []
     }
 
     if (!newUid) {
       userProfile.value = null
       receivedMessages.value = []
+      recipients.value = []
+      selectedRecipientIds.value = []
       if (typeof unsubscribeFromMessages.value === 'function') {
         unsubscribeFromMessages.value()
       }
@@ -830,12 +810,12 @@ watch(messagesError, (value) => {
   }
 })
 
-watch(counterpartRole, (role) => {
-  selectedRecipientIds.value = []
-  if (role) {
+watch(hasFirebaseAccess, (access) => {
+  if (access) {
     loadRecipients()
   } else {
     recipients.value = []
+    selectedRecipientIds.value = []
   }
 })
 
@@ -893,10 +873,10 @@ onBeforeUnmount(() => {
 
         <div v-else class="messaging-center__content">
           <section class="messaging-center__section">
-            <h2 class="messaging-center__section-heading">Send a message to your {{ counterpartLabelPlural.toLowerCase() }}</h2>
+            <h2 class="messaging-center__section-heading">Send a message to your {{ recipientLabelPlural.toLowerCase() }}</h2>
 
             <div class="messaging-center__form">
-              <label class="messaging-center__label" for="recipients">Select {{ counterpartLabelPlural.toLowerCase() }}</label>
+              <label class="messaging-center__label" for="recipients">Select {{ recipientLabelPlural.toLowerCase() }}</label>
               <MultiSelect
                 input-id="recipients"
                 v-model="selectedRecipientIds"
@@ -950,7 +930,7 @@ onBeforeUnmount(() => {
             <div class="messaging-center__email">
               <h3 class="messaging-center__subheading">Prefer email?</h3>
               <p class="messaging-center__description">
-                Send an email with optional attachments to the selected {{ counterpartLabelPlural.toLowerCase() }}.
+                Send an email with optional attachments to the selected {{ recipientLabelPlural.toLowerCase() }}.
               </p>
 
               <label class="messaging-center__label" for="email-subject">Email subject</label>
