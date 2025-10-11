@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import Button from 'primevue/button'
+import Dialog from 'primevue/dialog'
 import Dropdown from 'primevue/dropdown'
 import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
@@ -47,6 +48,21 @@ const emailAttachments = ref([])
 const emailSending = ref(false)
 const emailError = ref('')
 const emailSuccess = ref('')
+
+const googleGeminiApiKey =
+  typeof import.meta.env.VITE_GOOGLE_GEMINI_API_KEY === 'string'
+    ? import.meta.env.VITE_GOOGLE_GEMINI_API_KEY.trim()
+    : ''
+
+const isGeminiConfigured = computed(() => Boolean(googleGeminiApiKey))
+
+const aiDialogVisible = ref(false)
+const aiPrompt = ref('')
+const aiGenerating = ref(false)
+const aiError = ref('')
+const aiTarget = ref('message')
+
+const aiTargetLabel = computed(() => (aiTarget.value === 'email' ? 'email message' : 'message'))
 
 const sendEmailEndpoint =
   typeof import.meta.env.VITE_SENDGRID_ENDPOINT === 'string' && import.meta.env.VITE_SENDGRID_ENDPOINT.trim()
@@ -118,6 +134,110 @@ const selectedRecipientEmail = computed(() => selectedRecipient.value?.email || 
 const canSendInternalMessage = computed(
   () => hasFirebaseAccess.value && (isBeneficiary.value || isCarer.value),
 )
+
+const openAiDialog = (target) => {
+  aiTarget.value = target === 'email' ? 'email' : 'message'
+  aiDialogVisible.value = true
+  aiPrompt.value = ''
+  aiError.value = ''
+
+  if (!isGeminiConfigured.value) {
+    aiError.value =
+      'AI writing is not configured. Please add the Google Gemini API key to enable this feature.'
+  }
+}
+
+const closeAiDialog = () => {
+  if (aiGenerating.value) return
+  aiDialogVisible.value = false
+}
+
+const applyAiContentToTarget = (content) => {
+  const trimmedContent = typeof content === 'string' ? content.trim() : ''
+
+  if (!trimmedContent) return
+
+  if (aiTarget.value === 'email') {
+    emailBody.value = trimmedContent
+  } else {
+    messageBody.value = trimmedContent
+  }
+}
+
+const generateAiContent = async () => {
+  const prompt = aiPrompt.value.trim()
+
+  if (!prompt) {
+    aiError.value = 'Enter a prompt so the AI knows what to write.'
+    return
+  }
+
+  if (!googleGeminiApiKey) {
+    aiError.value =
+      'AI writing is not configured. Please add the Google Gemini API key to enable this feature.'
+    return
+  }
+
+  aiGenerating.value = true
+  aiError.value = ''
+
+  try {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${googleGeminiApiKey}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              role: 'user',
+              parts: [{ text: prompt }],
+            },
+          ],
+        }),
+      },
+    )
+
+    if (!response.ok) {
+      let errorMessage = 'We could not generate a response. Please try again.'
+      try {
+        const errorPayload = await response.json()
+        if (errorPayload?.error?.message) {
+          errorMessage = errorPayload.error.message
+        }
+      } catch (error) {
+        // Ignore JSON parsing errors
+      }
+      throw new Error(errorMessage)
+    }
+
+    const payload = await response.json()
+    const candidate = payload?.candidates?.[0]
+    const parts = candidate?.content?.parts || []
+    const generatedText = parts
+      .map((part) => (typeof part?.text === 'string' ? part.text : ''))
+      .filter(Boolean)
+      .join('\n')
+      .trim()
+
+    if (!generatedText) {
+      throw new Error('The AI did not return any content. Try a different prompt.')
+    }
+
+    applyAiContentToTarget(generatedText)
+    aiDialogVisible.value = false
+  } catch (error) {
+    console.error('Failed to generate AI content', error)
+    aiError.value =
+      error instanceof Error && error.message
+        ? error.message
+        : 'We could not generate a response. Please try again.'
+  } finally {
+    aiGenerating.value = false
+  }
+}
 
 const loadUserProfile = async () => {
   if (!db || !firebaseUser.value?.uid) {
@@ -410,6 +530,17 @@ onMounted(() => {
 })
 
 watch(
+  () => aiDialogVisible.value,
+  (visible) => {
+    if (!visible) {
+      aiPrompt.value = ''
+      aiError.value = ''
+      aiGenerating.value = false
+    }
+  },
+)
+
+watch(
   () => firebaseUser.value?.uid,
   (newUid, oldUid) => {
     if (newUid && newUid !== oldUid) {
@@ -518,12 +649,23 @@ onBeforeUnmount(() => {
                 <Message v-else-if="messageSuccess" severity="success">{{ messageSuccess }}</Message>
               </div>
 
-              <Button
-                label="Send message"
-                class="messaging-center__submit"
-                :loading="sendingMessage"
-                @click="handleSendMessage"
-              />
+              <div class="messaging-center__actions">
+                <Button
+                  label="Send message"
+                  class="messaging-center__submit"
+                  :loading="sendingMessage"
+                  @click="handleSendMessage"
+                />
+                <Button
+                  label="Write with AI"
+                  icon="pi pi-sparkles"
+                  class="messaging-center__ai-button"
+                  severity="secondary"
+                  outlined
+                  :disabled="aiGenerating"
+                  @click="openAiDialog('message')"
+                />
+              </div>
             </div>
 
             <div class="messaging-center__email">
@@ -567,13 +709,24 @@ onBeforeUnmount(() => {
                 <Message v-else-if="emailSuccess" severity="success">{{ emailSuccess }}</Message>
               </div>
 
-              <Button
-                label="Send email"
-                severity="secondary"
-                class="messaging-center__submit"
-                :loading="emailSending"
-                @click="handleSendEmail"
-              />
+              <div class="messaging-center__actions">
+                <Button
+                  label="Send email"
+                  severity="secondary"
+                  class="messaging-center__submit"
+                  :loading="emailSending"
+                  @click="handleSendEmail"
+                />
+                <Button
+                  label="Write with AI"
+                  icon="pi pi-sparkles"
+                  class="messaging-center__ai-button"
+                  severity="secondary"
+                  outlined
+                  :disabled="aiGenerating"
+                  @click="openAiDialog('email')"
+                />
+              </div>
             </div>
           </section>
 
@@ -607,6 +760,66 @@ onBeforeUnmount(() => {
         </div>
       </div>
     </div>
+
+    <Dialog
+      v-model:visible="aiDialogVisible"
+      modal
+      header="Write with AI"
+      :closable="!aiGenerating"
+      :close-on-escape="!aiGenerating"
+      :dismissable-mask="!aiGenerating"
+      :style="{ width: 'min(560px, 95vw)' }"
+      class="messaging-center__ai-dialog"
+      @hide="closeAiDialog"
+    >
+      <div class="messaging-center__ai-dialog-content">
+        <p class="messaging-center__ai-description">
+          Provide a prompt to help the AI draft your {{ aiTargetLabel }}.
+        </p>
+
+        <label class="messaging-center__label" for="ai-prompt">Prompt</label>
+        <Textarea
+          id="ai-prompt"
+          v-model="aiPrompt"
+          auto-resize
+          rows="5"
+          placeholder="Describe what you would like to say"
+          class="messaging-center__textarea"
+        />
+
+        <small class="messaging-center__hint">
+          The generated text will replace your current {{ aiTargetLabel }}. You can edit it before
+          sending.
+        </small>
+
+        <div v-if="!isGeminiConfigured" class="messaging-center__ai-feedback">
+          <Message severity="warn">
+            Google Gemini is not configured. Add the API key to enable AI writing.
+          </Message>
+        </div>
+
+        <div v-if="aiError" class="messaging-center__ai-feedback">
+          <Message severity="error">{{ aiError }}</Message>
+        </div>
+      </div>
+
+      <template #footer>
+        <Button
+          label="Cancel"
+          text
+          class="messaging-center__ai-cancel"
+          :disabled="aiGenerating"
+          @click="closeAiDialog"
+        />
+        <Button
+          label="Generate"
+          icon="pi pi-sparkles"
+          :loading="aiGenerating"
+          :disabled="!isGeminiConfigured || aiGenerating"
+          @click="generateAiContent"
+        />
+      </template>
+    </Dialog>
   </div>
 </template>
 
@@ -676,8 +889,33 @@ onBeforeUnmount(() => {
   padding: 0.5rem 0;
 }
 
+.messaging-center__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
 .messaging-center__submit {
   align-self: flex-start;
+}
+
+.messaging-center__ai-dialog-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.messaging-center__ai-description {
+  margin: 0;
+  color: var(--p-surface-600, #52525b);
+  line-height: 1.5;
+}
+
+.messaging-center__ai-feedback {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
 }
 
 .messaging-center__feedback {
