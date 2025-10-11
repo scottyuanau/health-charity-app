@@ -25,6 +25,7 @@
     "firebase-admin": "^13.5.0",
     "firebase-functions": "^6.5.0",
     "pinia": "^3.0.3",
+    "primeicons": "^7.0.0",
     "primevue": "^4.4.1",
     "vee-validate": "^4.15.1",
     "vue": "^3.5.22",
