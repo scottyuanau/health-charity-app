@@ -10,7 +10,7 @@
  */
 
 const {setGlobalOptions} = require("firebase-functions");
-const {onDocumentCreated} = require("firebase-functions/v2/firestore");
+const {onDocumentCreated, onDocumentDeleted} = require("firebase-functions/v2/firestore");
 const logger = require("firebase-functions/logger");
 const admin = require("firebase-admin");
 
@@ -102,3 +102,28 @@ exports.onMessageCreated = onDocumentCreated("messages/{messageId}", async (even
     logger.error("Failed to create notification for message.", error);
   }
 });
+
+exports.onUserDeleted = onDocumentDeleted("users/{userId}", async (event) => {
+  const userId = event.params.userId;
+
+  if (!userId) {
+    logger.warn("User deletion event received without a userId.");
+    return;
+  }
+
+  try {
+    await admin.auth().deleteUser(userId);
+    logger.info("Deleted Firebase Authentication user for Firestore document.", {
+      userId,
+    });
+  } catch (error) {
+    if (error.code === "auth/user-not-found") {
+      logger.info("No Firebase Authentication user found for deleted Firestore user.", {
+        userId,
+      });
+      return;
+    }
+
+    logger.error("Failed to delete Firebase Authentication user.", error);
+  }
+}); 
