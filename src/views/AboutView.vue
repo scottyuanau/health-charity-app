@@ -1,4 +1,5 @@
-<script setup></script>
+<script setup>
+</script>
 
 <template>
   <div>
@@ -23,6 +24,11 @@
     Carer <br>
     Username: gu.yue.coco@gmail.com <br>
     Password: Gu.yue.coco@gmail.com1
+  </p>
+  <p>
+    Donor <br>
+    Username: michael1@gmail.com <br>
+    Password: Michael1@gmail.com
   </p>
 </template>
 
