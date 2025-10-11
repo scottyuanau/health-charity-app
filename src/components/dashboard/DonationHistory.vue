@@ -129,6 +129,99 @@ const clearDateFilter = () => {
   selectedDate.value = null
 }
 
+const escapePdfText = (text) => {
+  if (typeof text !== 'string') {
+    return ''
+  }
+  return text.replace(/([\\()])/g, '\\$1')
+}
+
+const createInvoicePdfBlob = (lines) => {
+  const encoder = new TextEncoder()
+  const lineSpacing = 20
+  const startingY = 760
+
+  const contentParts = [
+    'BT',
+    '/F1 20 Tf',
+    '50 800 Td',
+    `(${escapePdfText('Tax Invoice')}) Tj`,
+    'ET',
+  ]
+
+  lines.forEach((line, index) => {
+    const yPosition = startingY - index * lineSpacing
+    contentParts.push('BT')
+    contentParts.push('/F1 12 Tf')
+    contentParts.push(`50 ${yPosition} Td`)
+    contentParts.push(`(${escapePdfText(line)}) Tj`)
+    contentParts.push('ET')
+  })
+
+  const contentStream = contentParts.join('\n') + '\n'
+  const contentBytes = encoder.encode(contentStream)
+
+  const objects = [
+    '1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n',
+    '2 0 obj\n<< /Type /Pages /Count 1 /Kids [3 0 R] >>\nendobj\n',
+    '3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>\nendobj\n',
+    `4 0 obj\n<< /Length ${contentBytes.length} >>\nstream\n${contentStream}endstream\nendobj\n`,
+    '5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n',
+  ]
+
+  const header = '%PDF-1.4\n'
+  const headerBytes = encoder.encode(header)
+  let currentOffset = headerBytes.length
+  const xrefEntries = ['0000000000 65535 f \n']
+  let body = ''
+
+  objects.forEach((object) => {
+    const objectBytes = encoder.encode(object)
+    const offsetString = String(currentOffset).padStart(10, '0')
+    xrefEntries.push(`${offsetString} 00000 n \n`)
+    body += object
+    currentOffset += objectBytes.length
+  })
+
+  const xrefOffset = currentOffset
+  const xrefTable = `xref\n0 ${objects.length + 1}\n${xrefEntries.join('')}trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`
+
+  const pdfString = header + body + xrefTable
+  const pdfBytes = encoder.encode(pdfString)
+
+  return new Blob([pdfBytes], { type: 'application/pdf' })
+}
+
+const downloadInvoice = (donation) => {
+  if (!donation) {
+    return
+  }
+
+  const amount = typeof donation.amount === 'number' ? donation.amount : 0
+  const formattedAmount = formatAmount(amount)
+  const gstAmount = formatAmount(0)
+  const invoiceLines = [
+    'Health Charity Pty Ltd',
+    'ABN 90 123 455 789',
+    `Date: ${formatDate(donation.createdAt)}`,
+    `Donation Amount: ${formattedAmount}`,
+    `GST (0% for donations): ${gstAmount}`,
+    `Total: ${formattedAmount}`,
+    'Thank you for your support!',
+  ]
+
+  const blob = createInvoicePdfBlob(invoiceLines)
+  const objectUrl = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  const sanitizedId = typeof donation.id === 'string' && donation.id ? donation.id : 'donation'
+  link.href = objectUrl
+  link.download = `Tax-Invoice-${sanitizedId}.pdf`
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(objectUrl)
+}
+
 const stopListening = () => {
   if (typeof unsubscribeRef.value === 'function') {
     unsubscribeRef.value()
@@ -268,6 +361,17 @@ onBeforeUnmount(() => {
         >
           <template #body="{ data }">
             {{ formatAmount(data.amount) }}
+          </template>
+        </Column>
+        <Column header="Invoice" style="width: 10rem" class="text-center">
+          <template #body="{ data }">
+            <Button
+              type="button"
+              icon="pi pi-download"
+              label="Download"
+              size="small"
+              @click="downloadInvoice(data)"
+            />
           </template>
         </Column>
       </DataTable>
