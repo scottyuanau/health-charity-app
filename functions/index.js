@@ -1,3 +1,5 @@
+/* eslint-env node */
+
 /**
  * Import function triggers from their respective submodules:
  *
@@ -8,8 +10,28 @@
  */
 
 const {setGlobalOptions} = require("firebase-functions");
-const {onRequest} = require("firebase-functions/https");
+const {onDocumentCreated} = require("firebase-functions/v2/firestore");
 const logger = require("firebase-functions/logger");
+const admin = require("firebase-admin");
+
+admin.initializeApp();
+
+const firestore = admin.firestore();
+
+const MAX_MESSAGE_PREVIEW_LENGTH = 180;
+
+const createMessagePreview = (body) => {
+  if (typeof body !== "string") {
+    return "";
+  }
+
+  const trimmed = body.trim();
+  if (trimmed.length <= MAX_MESSAGE_PREVIEW_LENGTH) {
+    return trimmed;
+  }
+
+  return `${trimmed.slice(0, MAX_MESSAGE_PREVIEW_LENGTH - 1)}…`;
+};
 
 // For cost control, you can set the maximum number of containers that can be
 // running at the same time. This helps mitigate the impact of unexpected
@@ -30,3 +52,50 @@ setGlobalOptions({ maxInstances: 10 });
 //   logger.info("Hello logs!", {structuredData: true});
 //   response.send("Hello from Firebase!");
 // });
+
+exports.onMessageCreated = onDocumentCreated("messages/{messageId}", async (event) => {
+  const snapshot = event.data;
+
+  if (!snapshot) {
+    logger.warn("Message creation event received without data.");
+    return;
+  }
+
+  const messageData = snapshot.data();
+
+  if (!messageData) {
+    logger.warn("Message document contained no data.");
+    return;
+  }
+
+  const recipientId = messageData.recipientId;
+
+  if (!recipientId) {
+    logger.warn("Message was created without a recipientId.", {
+      messageId: event.params.messageId,
+    });
+    return;
+  }
+
+  const notificationPayload = {
+    recipientId,
+    messageId: event.params.messageId,
+    type: "message",
+    read: false,
+    senderId: messageData.senderId ?? null,
+    senderName: messageData.senderName ?? null,
+    messageBody: typeof messageData.body === "string" ? messageData.body : "",
+    messagePreview: createMessagePreview(messageData.body),
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+
+  try {
+    await firestore.collection("notifications").add(notificationPayload);
+    logger.info("Notification created for message.", {
+      messageId: event.params.messageId,
+      recipientId,
+    });
+  } catch (error) {
+    logger.error("Failed to create notification for message.", error);
+  }
+});

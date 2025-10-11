@@ -1,13 +1,25 @@
 <script setup>
 import { RouterLink, useRouter } from 'vue-router'
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import MenuBar from 'primevue/menubar'
 import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
 import SelectButton from 'primevue/selectbutton'
 import InputNumber from 'primevue/inputnumber'
 import Message from 'primevue/message'
-import { addDoc, collection, doc, getDoc, serverTimestamp } from 'firebase/firestore'
+import {
+  addDoc,
+  collection,
+  doc,
+  getDoc,
+  limit,
+  onSnapshot,
+  orderBy,
+  query,
+  serverTimestamp,
+  updateDoc,
+  where,
+} from 'firebase/firestore'
 
 import { db } from '../firebase'
 import { useAuth } from '../composables/auth'
@@ -112,6 +124,40 @@ const firebaseUser = computed(() => {
 
 const hasFirebaseAccess = computed(() => Boolean(db) && Boolean(firebaseUser.value))
 
+const notifications = ref([])
+const notificationsLoading = ref(false)
+const notificationsError = ref('')
+const notificationsDropdownVisible = ref(false)
+const notificationsContainerRef = ref(null)
+const unsubscribeFromNotifications = ref(null)
+const notificationsLimit = 20
+
+const unreadNotificationCount = computed(
+  () => notifications.value.filter((notification) => !notification.read).length,
+)
+
+const hasUnreadNotifications = computed(() => unreadNotificationCount.value > 0)
+
+const notificationBadgeLabel = computed(() => {
+  if (unreadNotificationCount.value > 99) {
+    return '99+'
+  }
+  return String(unreadNotificationCount.value)
+})
+
+const notificationTimeFormatter = new Intl.DateTimeFormat('en-GB', {
+  dateStyle: 'medium',
+  timeStyle: 'short',
+})
+
+const formatNotificationTimestamp = (date) => {
+  if (!(date instanceof Date)) {
+    return ''
+  }
+
+  return notificationTimeFormatter.format(date)
+}
+
 const donorRoles = computed(() => {
   const roles = userProfile.value?.roles
   return Array.isArray(roles) ? roles : []
@@ -155,6 +201,126 @@ const formatCurrency = (value) => {
     return ''
   }
   return currencyFormatter.format(value)
+}
+
+const resetNotifications = () => {
+  notifications.value = []
+  notificationsLoading.value = false
+  notificationsError.value = ''
+  notificationsDropdownVisible.value = false
+}
+
+const subscribeToNotifications = () => {
+  if (!db || !firebaseUser.value?.uid) {
+    if (typeof unsubscribeFromNotifications.value === 'function') {
+      unsubscribeFromNotifications.value()
+    }
+    unsubscribeFromNotifications.value = null
+    resetNotifications()
+    return
+  }
+
+  if (typeof unsubscribeFromNotifications.value === 'function') {
+    unsubscribeFromNotifications.value()
+  }
+
+  notificationsLoading.value = true
+  notificationsError.value = ''
+
+  try {
+    const notificationsQuery = query(
+      collection(db, 'notifications'),
+      where('recipientId', '==', firebaseUser.value.uid),
+      orderBy('createdAt', 'desc'),
+      limit(notificationsLimit),
+    )
+
+    unsubscribeFromNotifications.value = onSnapshot(
+      notificationsQuery,
+      (snapshot) => {
+        const items = snapshot.docs.map((snapshotDoc) => {
+          const data = snapshotDoc.data() || {}
+          const createdAt = data?.createdAt?.toDate?.() || null
+
+          const messageBody = typeof data.messageBody === 'string' ? data.messageBody : ''
+          const messagePreview =
+            typeof data.messagePreview === 'string' && data.messagePreview
+              ? data.messagePreview
+              : messageBody
+
+          return {
+            id: snapshotDoc.id,
+            read: Boolean(data.read),
+            senderName: data.senderName || 'New message',
+            messageBody,
+            messagePreview,
+            createdAt,
+          }
+        })
+
+        notifications.value = items
+        notificationsLoading.value = false
+      },
+      (error) => {
+        console.error('Failed to subscribe to notifications', error)
+        notificationsError.value = 'We could not load your notifications right now.'
+        notifications.value = []
+        notificationsLoading.value = false
+      },
+    )
+  } catch (error) {
+    console.error('Failed to subscribe to notifications', error)
+    notificationsError.value = 'We could not load your notifications right now.'
+    notifications.value = []
+    notificationsLoading.value = false
+  }
+}
+
+const toggleNotificationsDropdown = () => {
+  notificationsDropdownVisible.value = !notificationsDropdownVisible.value
+}
+
+const closeNotificationsDropdown = () => {
+  notificationsDropdownVisible.value = false
+}
+
+const markNotificationAsRead = async (notificationId) => {
+  if (!db || !notificationId) {
+    return
+  }
+
+  try {
+    const notificationRef = doc(db, 'notifications', notificationId)
+    await updateDoc(notificationRef, {
+      read: true,
+      readAt: serverTimestamp(),
+    })
+  } catch (error) {
+    console.error('Failed to mark notification as read', error)
+  }
+}
+
+const handleNotificationClick = async (notification) => {
+  if (!notification?.id) {
+    return
+  }
+
+  if (!notification.read) {
+    notification.read = true
+    await markNotificationAsRead(notification.id)
+  }
+}
+
+const handleDocumentClick = (event) => {
+  if (!notificationsDropdownVisible.value) {
+    return
+  }
+
+  const container = notificationsContainerRef.value
+
+  if (container && !container.contains(event.target)) {
+    closeNotificationsDropdown()
+  }
 }
 
 const resetDonationForm = () => {
@@ -250,21 +416,33 @@ const handleDonationSubmit = async () => {
 }
 
 onMounted(() => {
+  document.addEventListener('click', handleDocumentClick)
+
   if (hasFirebaseAccess.value) {
     loadUserProfile()
+  }
+
+  subscribeToNotifications()
+})
+
+onUnmounted(() => {
+  document.removeEventListener('click', handleDocumentClick)
+
+  if (typeof unsubscribeFromNotifications.value === 'function') {
+    unsubscribeFromNotifications.value()
   }
 })
 
 watch(
   () => firebaseUser.value?.uid,
-  (newUid, oldUid) => {
-    if (newUid && newUid !== oldUid) {
+  (newUid) => {
+    if (newUid) {
       loadUserProfile()
-    }
-
-    if (!newUid) {
+    } else {
       userProfile.value = null
     }
+
+    subscribeToNotifications()
   },
 )
 
@@ -274,6 +452,13 @@ watch(
     if (value !== 'other') {
       customDonationAmount.value = null
     }
+  },
+)
+
+watch(
+  () => router.currentRoute.value.fullPath,
+  () => {
+    closeNotificationsDropdown()
   },
 )
 </script>
@@ -291,12 +476,102 @@ watch(
           </RouterLink>
         </template>
         <template #end>
-          <Button
-            class="donate-now-button p-button-rounded p-button-raised"
-            label="Donate Now"
-            severity="danger"
-            @click="openDonationDialog"
-          />
+          <div class="navbar-actions">
+            <div
+              v-if="isAuthenticated"
+              ref="notificationsContainerRef"
+              class="navbar-notifications"
+            >
+              <button
+                type="button"
+                class="navbar-notifications__button"
+                @click.stop="toggleNotificationsDropdown"
+                :aria-expanded="notificationsDropdownVisible ? 'true' : 'false'"
+                aria-haspopup="true"
+                aria-label="Notifications"
+              >
+                <span class="pi pi-bell" aria-hidden="true"></span>
+                <span
+                  v-if="hasUnreadNotifications"
+                  class="navbar-notifications__badge"
+                >
+                  {{ notificationBadgeLabel }}
+                </span>
+              </button>
+
+              <transition name="navbar-notifications__transition">
+                <div
+                  v-if="notificationsDropdownVisible"
+                  class="navbar-notifications__panel"
+                  role="menu"
+                >
+                  <div
+                    v-if="notificationsLoading"
+                    class="navbar-notifications__status"
+                  >
+                    Loading notifications…
+                  </div>
+                  <div
+                    v-else-if="notificationsError"
+                    class="navbar-notifications__status navbar-notifications__status--error"
+                  >
+                    {{ notificationsError }}
+                  </div>
+                  <div
+                    v-else-if="!hasFirebaseAccess"
+                    class="navbar-notifications__status"
+                  >
+                    Sign in with your Firebase account to view notifications.
+                  </div>
+                  <div
+                    v-else-if="notifications.length === 0"
+                    class="navbar-notifications__status"
+                  >
+                    You're all caught up! No new messages.
+                  </div>
+                  <ul v-else class="navbar-notifications__list">
+                    <li
+                      v-for="notification in notifications"
+                      :key="notification.id"
+                      class="navbar-notifications__item"
+                    >
+                      <button
+                        type="button"
+                        class="navbar-notifications__notification"
+                        @click.stop="handleNotificationClick(notification)"
+                        :class="{
+                          'navbar-notifications__notification--unread': !notification.read,
+                        }"
+                      >
+                        <span class="navbar-notifications__sender">
+                          {{ notification.senderName || 'New message' }}
+                        </span>
+                        <p class="navbar-notifications__message">
+                          {{
+                            notification.messageBody ||
+                            notification.messagePreview ||
+                            'Open your inbox to view this message.'
+                          }}
+                        </p>
+                        <span
+                          v-if="notification.createdAt"
+                          class="navbar-notifications__timestamp"
+                        >
+                          {{ formatNotificationTimestamp(notification.createdAt) }}
+                        </span>
+                      </button>
+                    </li>
+                  </ul>
+                </div>
+              </transition>
+            </div>
+            <Button
+              class="donate-now-button p-button-rounded p-button-raised"
+              label="Donate Now"
+              severity="danger"
+              @click="openDonationDialog"
+            />
+          </div>
         </template>
       </MenuBar>
 
@@ -419,6 +694,144 @@ watch(
 
 :deep(.p-menubar-root-list) {
   margin-left: auto;
+}
+
+.navbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.navbar-notifications {
+  position: relative;
+}
+
+.navbar-notifications__button {
+  position: relative;
+  border: none;
+  background: transparent;
+  color: var(--bs-body-color);
+  cursor: pointer;
+  padding: 0.25rem;
+  font-size: 1.35rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s ease;
+}
+
+.navbar-notifications__button:hover,
+.navbar-notifications__button:focus-visible {
+  color: var(--bs-danger);
+  outline: none;
+}
+
+.navbar-notifications__badge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  transform: translate(45%, -45%);
+  background: #dc3545;
+  color: #fff;
+  border-radius: 999px;
+  padding: 0 0.4rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1.4;
+  min-width: 1.2rem;
+  text-align: center;
+}
+
+.navbar-notifications__panel {
+  position: absolute;
+  top: 115%;
+  right: 0;
+  width: min(22rem, 85vw);
+  background: #fff;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 16px 32px rgba(15, 23, 42, 0.18);
+  padding: 0.75rem;
+  z-index: 1050;
+}
+
+.navbar-notifications__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.navbar-notifications__item {
+  margin: 0;
+}
+
+.navbar-notifications__notification {
+  width: 100%;
+  border: none;
+  background: transparent;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+  padding: 0.75rem;
+  border-radius: 0.6rem;
+  cursor: pointer;
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
+  text-align: left;
+}
+
+.navbar-notifications__notification:hover,
+.navbar-notifications__notification:focus-visible {
+  background: rgba(220, 53, 69, 0.12);
+  outline: none;
+}
+
+.navbar-notifications__notification--unread {
+  background: rgba(220, 53, 69, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(220, 53, 69, 0.12);
+}
+
+.navbar-notifications__sender {
+  font-weight: 600;
+  color: var(--bs-body-color);
+}
+
+.navbar-notifications__message {
+  margin: 0;
+  color: var(--bs-secondary-color);
+  font-size: 0.9rem;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.navbar-notifications__timestamp {
+  font-size: 0.75rem;
+  color: var(--bs-tertiary-color, #6c757d);
+}
+
+.navbar-notifications__status {
+  padding: 0.75rem;
+  font-size: 0.9rem;
+  color: var(--bs-secondary-color);
+  text-align: center;
+}
+
+.navbar-notifications__status--error {
+  color: var(--bs-danger);
+}
+
+.navbar-notifications__transition-enter-active,
+.navbar-notifications__transition-leave-active {
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.navbar-notifications__transition-enter-from,
+.navbar-notifications__transition-leave-to {
+  opacity: 0;
+  transform: translateY(-10%);
 }
 
 .donate-now-button {
