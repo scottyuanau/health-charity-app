@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
+import Dropdown from 'primevue/dropdown'
 import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
 import Textarea from 'primevue/textarea'
@@ -48,6 +49,14 @@ const receivedMessagesPage = ref(1)
 const deletingMessageIds = ref([])
 const clearingAllMessages = ref(false)
 const messagesSuccess = ref('')
+
+const selectedMessageSenderKeys = ref([])
+const messageSearchQuery = ref('')
+const messageSortOrder = ref('newest')
+const messageSortOptions = [
+  { label: 'Newest first', value: 'newest' },
+  { label: 'Oldest first', value: 'oldest' },
+]
 
 const emailSubject = ref('')
 const emailBody = ref('')
@@ -153,8 +162,68 @@ const selectedRecipientsMissingEmail = computed(() =>
   selectedRecipients.value.filter((recipient) => !recipient.email),
 )
 
+const availableMessageSenders = computed(() => {
+  const uniqueSenders = new Map()
+
+  for (const message of receivedMessages.value) {
+    const senderKey = typeof message?.senderKey === 'string' ? message.senderKey : ''
+    if (!senderKey || uniqueSenders.has(senderKey)) {
+      continue
+    }
+
+    const senderName =
+      typeof message?.senderName === 'string' && message.senderName.trim()
+        ? message.senderName.trim()
+        : 'Unknown sender'
+
+    uniqueSenders.set(senderKey, {
+      id: senderKey,
+      name: senderName,
+    })
+  }
+
+  return Array.from(uniqueSenders.values()).sort((a, b) => a.name.localeCompare(b.name))
+})
+
+const filteredReceivedMessages = computed(() => {
+  const senderFilters = Array.isArray(selectedMessageSenderKeys.value)
+    ? selectedMessageSenderKeys.value.filter((value) => typeof value === 'string' && value)
+    : []
+
+  const activeSenderKeys = new Set(senderFilters)
+  const searchTerm = messageSearchQuery.value.trim().toLowerCase()
+  const sortOrder = messageSortOrder.value === 'oldest' ? 'oldest' : 'newest'
+
+  let messages = receivedMessages.value.slice()
+
+  if (activeSenderKeys.size > 0) {
+    messages = messages.filter((message) =>
+      message?.senderKey ? activeSenderKeys.has(message.senderKey) : false,
+    )
+  }
+
+  if (searchTerm) {
+    messages = messages.filter((message) => {
+      const senderName =
+        typeof message?.senderName === 'string' ? message.senderName.toLowerCase() : ''
+      const body = typeof message?.body === 'string' ? message.body.toLowerCase() : ''
+
+      return senderName.includes(searchTerm) || body.includes(searchTerm)
+    })
+  }
+
+  messages.sort((a, b) => {
+    const timeA = a?.sentAt?.getTime?.() ?? 0
+    const timeB = b?.sentAt?.getTime?.() ?? 0
+
+    return sortOrder === 'oldest' ? timeA - timeB : timeB - timeA
+  })
+
+  return messages
+})
+
 const totalReceivedMessagesPages = computed(() => {
-  const total = Math.ceil(receivedMessages.value.length / RECEIVED_MESSAGES_PER_PAGE)
+  const total = Math.ceil(filteredReceivedMessages.value.length / RECEIVED_MESSAGES_PER_PAGE)
   return total > 0 ? total : 1
 })
 
@@ -162,7 +231,7 @@ const paginatedReceivedMessages = computed(() => {
   const safePage = Math.max(1, Math.min(receivedMessagesPage.value, totalReceivedMessagesPages.value))
   const startIndex = (safePage - 1) * RECEIVED_MESSAGES_PER_PAGE
   const endIndex = startIndex + RECEIVED_MESSAGES_PER_PAGE
-  return receivedMessages.value.slice(startIndex, endIndex)
+  return filteredReceivedMessages.value.slice(startIndex, endIndex)
 })
 
 const canSendInternalMessage = computed(
@@ -421,10 +490,19 @@ const subscribeToReceivedMessages = () => {
         const messages = snapshot.docs.map((snapshotDoc) => {
           const data = snapshotDoc.data()
           const createdAt = data?.createdAt?.toDate?.() || null
+          const senderId =
+            typeof data?.senderId === 'string' && data.senderId.trim()
+              ? data.senderId.trim()
+              : ''
+          const senderNameRaw = typeof data?.senderName === 'string' ? data.senderName : ''
+          const senderName = senderNameRaw.trim() || 'Unknown sender'
+          const senderKey = senderId || `name:${senderName.toLowerCase()}`
           return {
             id: snapshotDoc.id,
-            senderName: data?.senderName || 'Unknown sender',
-            body: data?.body || '',
+            senderId: senderId || null,
+            senderKey,
+            senderName,
+            body: typeof data?.body === 'string' ? data.body : '',
             sentAt: createdAt,
           }
         })
@@ -718,7 +796,7 @@ watch(
   },
 )
 
-watch(receivedMessages, (newMessages) => {
+watch(filteredReceivedMessages, (newMessages) => {
   if (!Array.isArray(newMessages)) {
     receivedMessagesPage.value = 1
     return
@@ -733,6 +811,17 @@ watch(receivedMessages, (newMessages) => {
   if (newMessages.length === 0) {
     receivedMessagesPage.value = 1
   }
+})
+
+watch(availableMessageSenders, (senders) => {
+  const validSenderKeys = new Set(senders.map((sender) => sender.id))
+  selectedMessageSenderKeys.value = selectedMessageSenderKeys.value.filter((key) =>
+    validSenderKeys.has(key),
+  )
+})
+
+watch([selectedMessageSenderKeys, messageSearchQuery, messageSortOrder], () => {
+  receivedMessagesPage.value = 1
 })
 
 watch(messagesError, (value) => {
@@ -957,61 +1046,118 @@ onBeforeUnmount(() => {
                 <Message severity="success">{{ messagesSuccess }}</Message>
               </div>
 
-              <ul class="messaging-center__message-list">
-                <li
-                  v-for="message in paginatedReceivedMessages"
-                  :key="message.id"
-                  class="messaging-center__message-item"
-                >
-                  <div class="messaging-center__message-header">
-                    <div class="messaging-center__message-meta">
-                      <span class="messaging-center__message-sender">{{ message.senderName }}</span>
-                      <span v-if="message.sentAt" class="messaging-center__message-date">
-                        {{ message.sentAt.toLocaleString() }}
-                      </span>
-                    </div>
-                    <div class="messaging-center__message-actions">
-                      <Button
-                        label="Clear"
-                        icon="pi pi-times"
-                        severity="secondary"
-                        text
-                        size="small"
-                        class="messaging-center__clear-message"
-                        :loading="isDeletingMessage(message.id)"
-                        :disabled="isDeletingMessage(message.id) || clearingAllMessages"
-                        @click="handleDeleteMessage(message.id)"
-                      />
-                    </div>
-                  </div>
-                  <p class="messaging-center__message-body">{{ message.body }}</p>
-                </li>
-              </ul>
+              <div class="messaging-center__received-controls">
+                <div class="messaging-center__control messaging-center__control--wide">
+                  <label class="messaging-center__label messaging-center__label--inline" for="message-sender-filter">
+                    Filter by sender
+                  </label>
+                  <MultiSelect
+                    input-id="message-sender-filter"
+                    v-model="selectedMessageSenderKeys"
+                    :options="availableMessageSenders"
+                    option-label="name"
+                    option-value="id"
+                    placeholder="All senders"
+                    display="chip"
+                    filter
+                    class="messaging-center__dropdown"
+                  />
+                </div>
 
-              <div v-if="totalReceivedMessagesPages > 1" class="messaging-center__pagination">
-                <Button
-                  label="Previous"
-                  icon="pi pi-chevron-left"
-                  severity="secondary"
-                  text
-                  size="small"
-                  :disabled="receivedMessagesPage === 1"
-                  @click="goToPreviousMessagesPage"
-                />
-                <span class="messaging-center__pagination-label">
-                  Page {{ receivedMessagesPage }} of {{ totalReceivedMessagesPages }}
-                </span>
-                <Button
-                  label="Next"
-                  icon-pos="right"
-                  icon="pi pi-chevron-right"
-                  severity="secondary"
-                  text
-                  size="small"
-                  :disabled="receivedMessagesPage === totalReceivedMessagesPages"
-                  @click="goToNextMessagesPage"
-                />
+                <div class="messaging-center__control messaging-center__control--search">
+                  <label class="messaging-center__label messaging-center__label--inline" for="message-search">
+                    Search messages
+                  </label>
+                  <span class="p-input-icon-left messaging-center__search">
+                    <i class="pi pi-search" />
+                    <InputText
+                      id="message-search"
+                      v-model="messageSearchQuery"
+                      placeholder="Search by sender or content"
+                      class="messaging-center__search-input"
+                    />
+                  </span>
+                </div>
+
+                <div class="messaging-center__control messaging-center__control--compact">
+                  <label class="messaging-center__label messaging-center__label--inline" for="message-sort">
+                    Sort by
+                  </label>
+                  <Dropdown
+                    input-id="message-sort"
+                    v-model="messageSortOrder"
+                    :options="messageSortOptions"
+                    option-label="label"
+                    option-value="value"
+                    class="messaging-center__dropdown messaging-center__dropdown--compact"
+                  />
+                </div>
               </div>
+
+              <div
+                class="messaging-center__messages"
+                v-if="filteredReceivedMessages.length === 0"
+              >
+                <Message severity="info">No messages match your current filters.</Message>
+              </div>
+
+              <template v-else>
+                <ul class="messaging-center__message-list">
+                  <li
+                    v-for="message in paginatedReceivedMessages"
+                    :key="message.id"
+                    class="messaging-center__message-item"
+                  >
+                    <div class="messaging-center__message-header">
+                      <div class="messaging-center__message-meta">
+                        <span class="messaging-center__message-sender">{{ message.senderName }}</span>
+                        <span v-if="message.sentAt" class="messaging-center__message-date">
+                          {{ message.sentAt.toLocaleString() }}
+                        </span>
+                      </div>
+                      <div class="messaging-center__message-actions">
+                        <Button
+                          label="Clear"
+                          icon="pi pi-times"
+                          severity="secondary"
+                          text
+                          size="small"
+                          class="messaging-center__clear-message"
+                          :loading="isDeletingMessage(message.id)"
+                          :disabled="isDeletingMessage(message.id) || clearingAllMessages"
+                          @click="handleDeleteMessage(message.id)"
+                        />
+                      </div>
+                    </div>
+                    <p class="messaging-center__message-body">{{ message.body }}</p>
+                  </li>
+                </ul>
+
+                <div v-if="totalReceivedMessagesPages > 1" class="messaging-center__pagination">
+                  <Button
+                    label="Previous"
+                    icon="pi pi-chevron-left"
+                    severity="secondary"
+                    text
+                    size="small"
+                    :disabled="receivedMessagesPage === 1"
+                    @click="goToPreviousMessagesPage"
+                  />
+                  <span class="messaging-center__pagination-label">
+                    Page {{ receivedMessagesPage }} of {{ totalReceivedMessagesPages }}
+                  </span>
+                  <Button
+                    label="Next"
+                    icon-pos="right"
+                    icon="pi pi-chevron-right"
+                    severity="secondary"
+                    text
+                    size="small"
+                    :disabled="receivedMessagesPage === totalReceivedMessagesPages"
+                    @click="goToNextMessagesPage"
+                  />
+                </div>
+              </template>
             </div>
           </section>
         </div>
@@ -1202,6 +1348,47 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+}
+
+.messaging-center__received-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: flex-end;
+  margin-bottom: 1rem;
+}
+
+.messaging-center__control {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  width: 100%;
+}
+
+.messaging-center__control--wide,
+.messaging-center__control--search {
+  flex: 1 1 16rem;
+}
+
+.messaging-center__control--compact {
+  flex: 0 0 auto;
+  min-width: 10rem;
+}
+
+.messaging-center__label--inline {
+  font-size: 0.875rem;
+}
+
+.messaging-center__search {
+  width: 100%;
+}
+
+.messaging-center__search-input {
+  width: 100%;
+}
+
+.messaging-center__dropdown--compact {
+  min-width: 10rem;
 }
 
 .messaging-center__messages--success {
