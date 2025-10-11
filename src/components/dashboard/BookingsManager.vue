@@ -6,7 +6,19 @@ import Dropdown from 'primevue/dropdown'
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
 import Message from 'primevue/message'
-import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, onSnapshot, query, serverTimestamp, where } from 'firebase/firestore'
+import {
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  limit,
+  onSnapshot,
+  query,
+  serverTimestamp,
+  where,
+} from 'firebase/firestore'
 
 import { useAuth } from '@/composables/auth'
 import { db } from '@/firebase'
@@ -21,6 +33,9 @@ const bookingSuccess = ref('')
 const loadingCarers = ref(false)
 const carersLoadError = ref('')
 const carers = ref([])
+
+const bookingsOnSelectedDate = ref([])
+let bookingsRequestId = 0
 
 const beneficiaryBookings = ref([])
 const carerBookings = ref([])
@@ -247,7 +262,20 @@ const availableCarers = computed(() => {
   const dateKey = toDateKey(selectedDate.value)
   if (!dateKey) return []
 
-  return carers.value.filter((carer) => carer.availability.has(dateKey))
+  if (beneficiaryHasBookingOnSelectedDate.value) {
+    return []
+  }
+
+  const bookedCarerIds = new Set()
+  bookingsOnSelectedDate.value.forEach((booking) => {
+    if (booking?.carerId) {
+      bookedCarerIds.add(booking.carerId)
+    }
+  })
+
+  return carers.value.filter(
+    (carer) => carer.availability.has(dateKey) && !bookedCarerIds.has(carer.id),
+  )
 })
 
 const availableCarerOptions = computed(() =>
@@ -258,6 +286,12 @@ const availableCarerOptions = computed(() =>
 )
 
 const selectedCarer = computed(() => carers.value.find((carer) => carer.id === selectedCarerId.value) || null)
+
+const beneficiaryHasBookingOnSelectedDate = computed(
+  () =>
+    Boolean(firebaseUser.value?.uid) &&
+    bookingsOnSelectedDate.value.some((booking) => booking.beneficiaryId === firebaseUser.value.uid),
+)
 
 const beneficiaryDisplayName = computed(() => {
   if (typeof userProfile.value?.username === 'string' && userProfile.value.username.trim()) {
@@ -281,6 +315,65 @@ const resetBookingFeedback = () => {
   bookingSuccess.value = ''
 }
 
+const loadBookingsForSelectedDate = async (dateKey = toDateKey(selectedDate.value)) => {
+  if (!db || !dateKey) {
+    bookingsRequestId += 1
+    bookingsOnSelectedDate.value = []
+    return
+  }
+
+  const requestId = ++bookingsRequestId
+
+  try {
+    const bookingsQuery = query(collection(db, 'bookings'), where('date', '==', dateKey))
+    const snapshot = await getDocs(bookingsQuery)
+
+    if (requestId !== bookingsRequestId) {
+      return
+    }
+
+    bookingsOnSelectedDate.value = snapshot.docs.map((snapshotDoc) => ({
+      id: snapshotDoc.id,
+      ...snapshotDoc.data(),
+    }))
+  } catch (error) {
+    if (requestId === bookingsRequestId) {
+      console.error('Failed to load bookings for selected date', error)
+      bookingsOnSelectedDate.value = []
+    }
+  }
+}
+
+const checkExistingBookingConflicts = async ({ carerId, beneficiaryId, dateKey }) => {
+  if (!db || !carerId || !beneficiaryId || !dateKey) {
+    return { carerConflict: false, beneficiaryConflict: false }
+  }
+
+  const carerConflictQuery = query(
+    collection(db, 'bookings'),
+    where('carerId', '==', carerId),
+    where('date', '==', dateKey),
+    limit(1),
+  )
+
+  const beneficiaryConflictQuery = query(
+    collection(db, 'bookings'),
+    where('beneficiaryId', '==', beneficiaryId),
+    where('date', '==', dateKey),
+    limit(1),
+  )
+
+  const [carerSnapshot, beneficiarySnapshot] = await Promise.all([
+    getDocs(carerConflictQuery),
+    getDocs(beneficiaryConflictQuery),
+  ])
+
+  return {
+    carerConflict: !carerSnapshot.empty,
+    beneficiaryConflict: !beneficiarySnapshot.empty,
+  }
+}
+
 const handleCreateBooking = async () => {
   if (!db || !firebaseUser.value?.uid) return
   if (!selectedDate.value || !selectedCarer.value) {
@@ -296,11 +389,39 @@ const handleCreateBooking = async () => {
     return
   }
 
+  if (beneficiaryHasBookingOnSelectedDate.value) {
+    bookingError.value = 'You already have a booking on this date. Cancel it before creating a new one.'
+    bookingSuccess.value = ''
+    return
+  }
+
   bookingSaving.value = true
   bookingError.value = ''
   bookingSuccess.value = ''
 
   try {
+    const { carerConflict, beneficiaryConflict } = await checkExistingBookingConflicts({
+      carerId: selectedCarer.value.id,
+      beneficiaryId: firebaseUser.value.uid,
+      dateKey,
+    })
+
+    if (carerConflict) {
+      bookingError.value = `${selectedCarer.value.name} is no longer available on ${formatDisplayDate(
+        dateKey,
+      )}. Please choose another date or carer.`
+      bookingSuccess.value = ''
+      await loadBookingsForSelectedDate(dateKey)
+      return
+    }
+
+    if (beneficiaryConflict) {
+      bookingError.value = 'You already have a booking on this date. Cancel it before creating a new one.'
+      bookingSuccess.value = ''
+      await loadBookingsForSelectedDate(dateKey)
+      return
+    }
+
     await addDoc(collection(db, 'bookings'), {
       beneficiaryId: firebaseUser.value.uid,
       beneficiaryName: beneficiaryDisplayName.value,
@@ -313,6 +434,7 @@ const handleCreateBooking = async () => {
 
     bookingSuccess.value = `Booking confirmed with ${selectedCarer.value.name} on ${formatDisplayDate(dateKey)}.`
     selectedCarerId.value = null
+    await loadBookingsForSelectedDate(dateKey)
   } catch (error) {
     console.error('Failed to create booking', error)
     bookingError.value = 'We could not complete your booking. Please try again.'
@@ -492,6 +614,40 @@ watch(
   { immediate: true },
 )
 
+watch(
+  [selectedDate, showNewBookingSection, () => firebaseUser.value?.uid],
+  ([dateValue, canShow]) => {
+    if (!canShow || !dateValue) {
+      bookingsRequestId += 1
+      bookingsOnSelectedDate.value = []
+      return
+    }
+
+    const dateKey = toDateKey(dateValue)
+    if (!dateKey) {
+      bookingsRequestId += 1
+      bookingsOnSelectedDate.value = []
+      return
+    }
+
+    loadBookingsForSelectedDate(dateKey)
+  },
+  { immediate: true },
+)
+
+watch(availableCarerOptions, (options) => {
+  if (!Array.isArray(options)) return
+  if (!options.some((option) => option.value === selectedCarerId.value)) {
+    selectedCarerId.value = null
+  }
+})
+
+watch(beneficiaryHasBookingOnSelectedDate, (hasBooking) => {
+  if (hasBooking) {
+    selectedCarerId.value = null
+  }
+})
+
 watch([selectedDate, selectedCarerId], () => {
   if (!bookingSaving.value) {
     resetBookingFeedback()
@@ -553,12 +709,31 @@ onBeforeUnmount(() => {
                 option-label="label"
                 option-value="value"
                 :loading="loadingCarers"
-                :disabled="loadingCarers || !selectedDate || availableCarerOptions.length === 0"
+                :disabled="
+                  loadingCarers ||
+                  !selectedDate ||
+                  availableCarerOptions.length === 0 ||
+                  beneficiaryHasBookingOnSelectedDate
+                "
                 placeholder="Select a carer"
                 show-clear
               />
-              <small v-if="selectedDate && !loadingCarers && availableCarerOptions.length === 0" class="bookings-manager__hint">
+              <small
+                v-if="
+                  selectedDate &&
+                  !loadingCarers &&
+                  availableCarerOptions.length === 0 &&
+                  !beneficiaryHasBookingOnSelectedDate
+                "
+                class="bookings-manager__hint"
+              >
                 No carers are available on the selected date. Please choose a different day.
+              </small>
+              <small
+                v-if="beneficiaryHasBookingOnSelectedDate"
+                class="bookings-manager__hint bookings-manager__hint--error"
+              >
+                You already have a booking on this date. Cancel your existing booking to make a new one.
               </small>
               <small v-if="carersLoadError" class="bookings-manager__hint bookings-manager__hint--error">
                 {{ carersLoadError }}
@@ -570,7 +745,12 @@ onBeforeUnmount(() => {
             <Button
               label="Book carer"
               icon="pi pi-calendar-plus"
-              :disabled="!selectedDate || !selectedCarerId || bookingSaving"
+              :disabled="
+                !selectedDate ||
+                !selectedCarerId ||
+                bookingSaving ||
+                beneficiaryHasBookingOnSelectedDate
+              "
               :loading="bookingSaving"
               @click="handleCreateBooking"
             />

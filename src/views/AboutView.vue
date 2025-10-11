@@ -15,7 +15,7 @@
     Password: Scottyuan123
   </p>
   <p>
-    Carer <br>
+    Beneficiary <br>
     Username: tony1@gmail.com <br>
     Password: Tony1@gmail.com
   </p>
