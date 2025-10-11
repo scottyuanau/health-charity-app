@@ -10,6 +10,7 @@ import Message from 'primevue/message'
 import {
   addDoc,
   collection,
+  deleteDoc,
   doc,
   getDoc,
   limit,
@@ -130,6 +131,7 @@ const notificationsLoading = ref(false)
 const notificationsError = ref('')
 const notificationsDropdownVisible = ref(false)
 const notificationsContainerRef = ref(null)
+const clearingNotifications = ref(false)
 const unsubscribeFromNotifications = ref(null)
 const notificationsLimit = 20
 
@@ -215,6 +217,7 @@ const resetNotifications = () => {
   notificationsLoading.value = false
   notificationsError.value = ''
   notificationsDropdownVisible.value = false
+  clearingNotifications.value = false
 }
 
 const createNotificationsListener = (useFallback = false) => {
@@ -324,6 +327,38 @@ const toggleNotificationsDropdown = () => {
 
 const closeNotificationsDropdown = () => {
   notificationsDropdownVisible.value = false
+}
+
+const handleClearAllNotifications = async () => {
+  if (!db || !firebaseUser.value?.uid || notifications.value.length === 0) {
+    return
+  }
+
+  const notificationIds = notifications.value
+    .map((notification) => notification.id)
+    .filter((id) => typeof id === 'string' && id.trim())
+
+  if (notificationIds.length === 0) {
+    return
+  }
+
+  clearingNotifications.value = true
+  notificationsError.value = ''
+
+  try {
+    await Promise.all(
+      notificationIds.map((notificationId) =>
+        deleteDoc(doc(db, 'notifications', notificationId)),
+      ),
+    )
+
+    notifications.value = []
+  } catch (error) {
+    console.error('Failed to clear notifications', error)
+    notificationsError.value = 'We could not clear your notifications right now.'
+  } finally {
+    clearingNotifications.value = false
+  }
 }
 
 const markNotificationAsRead = async (notificationId) => {
@@ -579,39 +614,51 @@ watch(
                   >
                     You're all caught up! No new messages.
                   </div>
-                  <ul v-else class="navbar-notifications__list">
-                    <li
-                      v-for="notification in notifications"
-                      :key="notification.id"
-                      class="navbar-notifications__item"
-                    >
+                  <div v-else class="navbar-notifications__content">
+                    <div class="navbar-notifications__actions">
                       <button
                         type="button"
-                        class="navbar-notifications__notification"
-                        @click.stop="handleNotificationClick(notification)"
-                        :class="{
-                          'navbar-notifications__notification--unread': !notification.read,
-                        }"
+                        class="navbar-notifications__clear-all"
+                        @click.stop="handleClearAllNotifications"
+                        :disabled="clearingNotifications"
                       >
-                        <span class="navbar-notifications__sender">
-                          {{ notification.senderName || 'New message' }}
-                        </span>
-                        <p class="navbar-notifications__message">
-                          {{
-                            notification.messageBody ||
-                            notification.messagePreview ||
-                            'Open your inbox to view this message.'
-                          }}
-                        </p>
-                        <span
-                          v-if="notification.createdAt"
-                          class="navbar-notifications__timestamp"
-                        >
-                          {{ formatNotificationTimestamp(notification.createdAt) }}
-                        </span>
+                        {{ clearingNotifications ? 'Clearing…' : 'Clear all' }}
                       </button>
-                    </li>
-                  </ul>
+                    </div>
+                    <ul class="navbar-notifications__list">
+                      <li
+                        v-for="notification in notifications"
+                        :key="notification.id"
+                        class="navbar-notifications__item"
+                      >
+                        <button
+                          type="button"
+                          class="navbar-notifications__notification"
+                          @click.stop="handleNotificationClick(notification)"
+                          :class="{
+                            'navbar-notifications__notification--unread': !notification.read,
+                          }"
+                        >
+                          <span class="navbar-notifications__sender">
+                            {{ notification.senderName || 'New message' }}
+                          </span>
+                          <p class="navbar-notifications__message">
+                            {{
+                              notification.messageBody ||
+                              notification.messagePreview ||
+                              'Open your inbox to view this message.'
+                            }}
+                          </p>
+                          <span
+                            v-if="notification.createdAt"
+                            class="navbar-notifications__timestamp"
+                          >
+                            {{ formatNotificationTimestamp(notification.createdAt) }}
+                          </span>
+                        </button>
+                      </li>
+                    </ul>
+                  </div>
                 </div>
               </transition>
             </div>
@@ -826,6 +873,39 @@ watch(
   box-shadow: 0 16px 32px rgba(15, 23, 42, 0.18);
   padding: 0.75rem;
   z-index: 1050;
+}
+
+.navbar-notifications__content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.navbar-notifications__actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.navbar-notifications__clear-all {
+  border: none;
+  background: transparent;
+  color: var(--bs-primary);
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0;
+  transition: color 0.2s ease;
+}
+
+.navbar-notifications__clear-all:hover,
+.navbar-notifications__clear-all:focus-visible {
+  color: var(--bs-danger);
+  outline: none;
+}
+
+.navbar-notifications__clear-all:disabled {
+  color: var(--bs-secondary-color);
+  cursor: not-allowed;
 }
 
 .navbar-notifications__list {

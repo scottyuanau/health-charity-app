@@ -470,6 +470,43 @@ const goToMessagesPage = (page) => {
 
 const isDeletingMessage = (messageId) => deletingMessageIds.value.includes(messageId)
 
+const clearNotificationsForMessageIds = async (messageIds) => {
+  if (!db || !firebaseUser.value?.uid || !Array.isArray(messageIds)) {
+    return
+  }
+
+  const sanitizedIds = Array.from(
+    new Set(
+      messageIds
+        .map((id) => (typeof id === 'string' ? id.trim() : ''))
+        .filter((id) => id.length > 0),
+    ),
+  )
+
+  if (sanitizedIds.length === 0) {
+    return
+  }
+
+  await Promise.all(
+    sanitizedIds.map(async (messageId) => {
+      const snapshot = await getDocs(
+        query(collection(db, 'notifications'), where('messageId', '==', messageId)),
+      )
+
+      const deletions = snapshot.docs
+        .filter((notificationDoc) => {
+          const data = notificationDoc.data()
+          return data?.recipientId === firebaseUser.value.uid
+        })
+        .map((notificationDoc) => deleteDoc(doc(db, 'notifications', notificationDoc.id)))
+
+      if (deletions.length > 0) {
+        await Promise.all(deletions)
+      }
+    }),
+  )
+}
+
 const handleDeleteMessage = async (messageId) => {
   if (!db || !firebaseUser.value?.uid || !messageId) {
     return
@@ -486,9 +523,10 @@ const handleDeleteMessage = async (messageId) => {
 
   try {
     await deleteDoc(doc(db, 'messages', messageId))
+    await clearNotificationsForMessageIds([messageId])
     messagesSuccess.value = 'Message cleared.'
   } catch (error) {
-    console.error('Failed to delete message', error)
+    console.error('Failed to clear message or related notifications', error)
     messagesError.value = 'We could not clear that message. Please try again.'
   } finally {
     deletingMessageIds.value = deletingMessageIds.value.filter((id) => id !== messageId)
@@ -509,10 +547,11 @@ const handleClearAllMessages = async () => {
 
   try {
     await Promise.all(messageIds.map((messageId) => deleteDoc(doc(db, 'messages', messageId))))
+    await clearNotificationsForMessageIds(messageIds)
     messagesSuccess.value = 'All messages cleared.'
     goToMessagesPage(1)
   } catch (error) {
-    console.error('Failed to clear messages', error)
+    console.error('Failed to clear messages or related notifications', error)
     messagesError.value = 'We could not clear your messages right now.'
   } finally {
     clearingAllMessages.value = false
