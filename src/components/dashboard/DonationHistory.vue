@@ -2,7 +2,9 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
+import DatePicker from 'primevue/datepicker'
 import Message from 'primevue/message'
+import Button from 'primevue/button'
 import { collection, onSnapshot, query, where } from 'firebase/firestore'
 
 import { useAuth } from '@/composables/auth'
@@ -14,6 +16,7 @@ const donations = ref([])
 const loading = ref(false)
 const errorMessage = ref('')
 const unsubscribeRef = ref(null)
+const selectedDate = ref(null)
 
 const firebaseUser = computed(() => {
   const user = state.user
@@ -82,6 +85,48 @@ const formatAmount = (amount) => {
     return '$0.00'
   }
   return currencyFormatter.format(amount)
+}
+
+const getDateRangeForFilter = (date) => {
+  if (!date) {
+    return null
+  }
+
+  const normalized = new Date(date)
+  if (Number.isNaN(normalized.getTime())) {
+    return null
+  }
+
+  normalized.setHours(0, 0, 0, 0)
+  const end = new Date(normalized)
+  end.setDate(end.getDate() + 1)
+
+  return {
+    start: normalized.getTime(),
+    end: end.getTime(),
+  }
+}
+
+const filteredDonations = computed(() => {
+  const range = getDateRangeForFilter(selectedDate.value)
+
+  if (!range) {
+    return donations.value
+  }
+
+  return donations.value.filter((donation) => {
+    const timestamp = getTimestampValue(donation.createdAt)
+
+    if (!timestamp) {
+      return false
+    }
+
+    return timestamp >= range.start && timestamp < range.end
+  })
+})
+
+const clearDateFilter = () => {
+  selectedDate.value = null
 }
 
 const stopListening = () => {
@@ -179,18 +224,54 @@ onBeforeUnmount(() => {
       <Message severity="info">No donations found yet. Your future contributions will appear here.</Message>
     </div>
 
-    <DataTable v-else :value="donations" dataKey="id" responsiveLayout="scroll">
-      <Column field="createdAt" header="Date">
-        <template #body="{ data }">
-          {{ formatDate(data.createdAt) }}
-        </template>
-      </Column>
-      <Column field="amount" header="Amount" style="width: 12rem" class="text-end">
-        <template #body="{ data }">
-          {{ formatAmount(data.amount) }}
-        </template>
-      </Column>
-    </DataTable>
+    <div v-else class="donation-history__content">
+      <div class="donation-history__filters">
+        <DatePicker
+          v-model="selectedDate"
+          :maxDate="new Date()"
+          dateFormat="MM d, yy"
+          showIcon
+          iconDisplay="input"
+          placeholder="Filter by date"
+          inputId="donation-date-filter"
+        />
+        <Button
+          v-if="selectedDate"
+          type="button"
+          severity="secondary"
+          outlined
+          @click="clearDateFilter"
+        >
+          Clear
+        </Button>
+      </div>
+
+      <DataTable
+        :value="filteredDonations"
+        dataKey="id"
+        responsiveLayout="scroll"
+        paginator
+        :rows="10"
+      >
+        <Column field="createdAt" header="Date" sortable>
+          <template #body="{ data }">
+            {{ formatDate(data.createdAt) }}
+          </template>
+        </Column>
+        <Column
+          field="amount"
+          header="Amount"
+          style="width: 12rem"
+          class="text-end"
+          sortable
+          dataType="numeric"
+        >
+          <template #body="{ data }">
+            {{ formatAmount(data.amount) }}
+          </template>
+        </Column>
+      </DataTable>
+    </div>
   </div>
 </template>
 
@@ -203,6 +284,19 @@ onBeforeUnmount(() => {
 
 .donation-history__message {
   max-width: 36rem;
+}
+
+.donation-history__content {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.donation-history__filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
 }
 
 .donation-history :deep(.p-datatable) {
