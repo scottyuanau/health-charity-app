@@ -285,6 +285,43 @@ const availableCarerOptions = computed(() =>
   })),
 )
 
+const availableBookingDateKeys = computed(() => {
+  const dateKeys = new Set()
+
+  carers.value.forEach((carer) => {
+    if (carer?.availability instanceof Set) {
+      carer.availability.forEach((dateKey) => {
+        if (typeof dateKey === 'string' && dateKey) {
+          dateKeys.add(dateKey)
+        }
+      })
+    }
+  })
+
+  return dateKeys
+})
+
+const isCalendarDateAvailable = (dateMeta) => {
+  if (!dateMeta?.selectable) return false
+
+  const { year, month, day } = dateMeta
+  if (
+    typeof year !== 'number' ||
+    typeof month !== 'number' ||
+    typeof day !== 'number' ||
+    Number.isNaN(year) ||
+    Number.isNaN(month) ||
+    Number.isNaN(day)
+  ) {
+    return false
+  }
+
+  const dateKey = toDateKey(new Date(year, month, day))
+  if (!dateKey) return false
+
+  return availableBookingDateKeys.value.has(dateKey)
+}
+
 const selectedCarer = computed(() => carers.value.find((carer) => carer.id === selectedCarerId.value) || null)
 
 const beneficiaryHasBookingOnSelectedDate = computed(
@@ -697,7 +734,18 @@ onBeforeUnmount(() => {
                 :show-other-months="true"
                 :manual-input="false"
                 show-icon
-              />
+              >
+                <template #date="slotProps">
+                  <div class="bookings-manager__calendar-date">
+                    <span>{{ slotProps.date.day }}</span>
+                    <span
+                      v-if="isCalendarDateAvailable(slotProps.date)"
+                      class="bookings-manager__availability-indicator"
+                      aria-hidden="true"
+                    />
+                  </div>
+                </template>
+              </DatePicker>
             </div>
 
             <div class="bookings-manager__field">
@@ -954,9 +1002,23 @@ onBeforeUnmount(() => {
   max-width: 36rem;
 }
 
-.bookings-manager__hint {
+.bookings-manager__hint { 
   font-size: 0.9rem;
   color: var(--app-muted-text);
+}
+
+.bookings-manager__calendar-date {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.bookings-manager__availability-indicator {
+  width: 0.375rem;
+  height: 0.375rem;
+  border-radius: 50%;
+  background-color: var(--p-semantic-success-color, #2e7d32);
 }
 
 .bookings-manager__hint--error {
