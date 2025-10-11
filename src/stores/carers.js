@@ -76,6 +76,68 @@ const transformCarerRecord = (snapshotDoc) => {
   const username = typeof data?.username === 'string' ? data.username.trim() : ''
   const email = typeof data?.email === 'string' ? data.email.trim() : ''
 
+  const address = typeof data?.address === 'string' ? data.address.trim() : ''
+
+  const extractCoordinates = (value) => {
+    if (!value) return null
+
+    const tryCreatePoint = (latCandidate, lngCandidate) => {
+      const lat = Number(latCandidate)
+      const lng = Number(lngCandidate)
+
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        return null
+      }
+
+      return { lat, lng }
+    }
+
+    if (typeof value === 'object') {
+      if (typeof value.latitude === 'number' && typeof value.longitude === 'number') {
+        return tryCreatePoint(value.latitude, value.longitude)
+      }
+
+      if (typeof value.lat === 'number' && typeof value.lng === 'number') {
+        return tryCreatePoint(value.lat, value.lng)
+      }
+
+      if (typeof value.lat === 'number' && typeof value.long === 'number') {
+        return tryCreatePoint(value.lat, value.long)
+      }
+
+      if (typeof value.latitude === 'number' && typeof value.long === 'number') {
+        return tryCreatePoint(value.latitude, value.long)
+      }
+
+      if (typeof value._lat === 'number' && typeof value._long === 'number') {
+        return tryCreatePoint(value._lat, value._long)
+      }
+
+      if (Array.isArray(value) && value.length >= 2) {
+        return tryCreatePoint(value[1], value[0])
+      }
+    }
+
+    if (Array.isArray(value) && value.length >= 2) {
+      return tryCreatePoint(value[1], value[0])
+    }
+
+    return null
+  }
+
+  const locationCandidates = [
+    data?.location,
+    data?.coordinates,
+    data?.position,
+    data?.geo,
+    data?.geopoint,
+  ]
+
+  const location = locationCandidates.reduce((result, candidate) => {
+    if (result) return result
+    return extractCoordinates(candidate)
+  }, null)
+
   return {
     id: snapshotDoc.id,
     name: username || (email ? email.split('@')[0] || email : 'Carer'),
@@ -83,6 +145,8 @@ const transformCarerRecord = (snapshotDoc) => {
     photo,
     description,
     reviews,
+    address,
+    location,
   }
 }
 

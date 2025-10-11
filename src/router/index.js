@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { isAuthenticated } from '../composables/auth'
 import HomeView from '../views/HomeView.vue'
 import CarersView from '../views/CarersView.vue'
+import FindSupportView from '../views/FindSupportView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -15,6 +16,11 @@ const router = createRouter({
       path: '/carers',
       name: 'carers',
       component: CarersView,
+    },
+    {
+      path: '/find-support',
+      name: 'find-support',
+      component: FindSupportView,
     },
     {
       path: '/carers/:id',
