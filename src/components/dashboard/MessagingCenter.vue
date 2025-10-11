@@ -9,6 +9,7 @@ import MultiSelect from 'primevue/multiselect'
 import {
   addDoc,
   collection,
+  deleteDoc,
   doc,
   getDoc,
   getDocs,
@@ -41,6 +42,12 @@ const unsubscribeFromMessages = ref(null)
 const messagesLoading = ref(false)
 const messagesError = ref('')
 const receivedMessages = ref([])
+
+const RECEIVED_MESSAGES_PER_PAGE = 10
+const receivedMessagesPage = ref(1)
+const deletingMessageIds = ref([])
+const clearingAllMessages = ref(false)
+const messagesSuccess = ref('')
 
 const emailSubject = ref('')
 const emailBody = ref('')
@@ -145,6 +152,18 @@ const selectedRecipientsWithEmail = computed(() =>
 const selectedRecipientsMissingEmail = computed(() =>
   selectedRecipients.value.filter((recipient) => !recipient.email),
 )
+
+const totalReceivedMessagesPages = computed(() => {
+  const total = Math.ceil(receivedMessages.value.length / RECEIVED_MESSAGES_PER_PAGE)
+  return total > 0 ? total : 1
+})
+
+const paginatedReceivedMessages = computed(() => {
+  const safePage = Math.max(1, Math.min(receivedMessagesPage.value, totalReceivedMessagesPages.value))
+  const startIndex = (safePage - 1) * RECEIVED_MESSAGES_PER_PAGE
+  const endIndex = startIndex + RECEIVED_MESSAGES_PER_PAGE
+  return receivedMessages.value.slice(startIndex, endIndex)
+})
 
 const canSendInternalMessage = computed(
   () => hasFirebaseAccess.value && (isBeneficiary.value || isCarer.value),
@@ -433,6 +452,74 @@ const subscribeToReceivedMessages = () => {
   }
 }
 
+const goToPreviousMessagesPage = () => {
+  if (receivedMessagesPage.value <= 1) return
+  receivedMessagesPage.value -= 1
+}
+
+const goToNextMessagesPage = () => {
+  if (receivedMessagesPage.value >= totalReceivedMessagesPages.value) return
+  receivedMessagesPage.value += 1
+}
+
+const goToMessagesPage = (page) => {
+  const parsedPage = Number(page) || 1
+  const clampedPage = Math.min(Math.max(parsedPage, 1), totalReceivedMessagesPages.value)
+  receivedMessagesPage.value = clampedPage
+}
+
+const isDeletingMessage = (messageId) => deletingMessageIds.value.includes(messageId)
+
+const handleDeleteMessage = async (messageId) => {
+  if (!db || !firebaseUser.value?.uid || !messageId) {
+    return
+  }
+
+  if (isDeletingMessage(messageId)) {
+    return
+  }
+
+  messagesError.value = ''
+  messagesSuccess.value = ''
+
+  deletingMessageIds.value = [...deletingMessageIds.value, messageId]
+
+  try {
+    await deleteDoc(doc(db, 'messages', messageId))
+    messagesSuccess.value = 'Message cleared.'
+  } catch (error) {
+    console.error('Failed to delete message', error)
+    messagesError.value = 'We could not clear that message. Please try again.'
+  } finally {
+    deletingMessageIds.value = deletingMessageIds.value.filter((id) => id !== messageId)
+  }
+}
+
+const handleClearAllMessages = async () => {
+  if (!db || !firebaseUser.value?.uid || receivedMessages.value.length === 0) {
+    return
+  }
+
+  messagesError.value = ''
+  messagesSuccess.value = ''
+  clearingAllMessages.value = true
+
+  const messageIds = receivedMessages.value.map((message) => message.id)
+  deletingMessageIds.value = Array.from(new Set([...deletingMessageIds.value, ...messageIds]))
+
+  try {
+    await Promise.all(messageIds.map((messageId) => deleteDoc(doc(db, 'messages', messageId))))
+    messagesSuccess.value = 'All messages cleared.'
+    goToMessagesPage(1)
+  } catch (error) {
+    console.error('Failed to clear messages', error)
+    messagesError.value = 'We could not clear your messages right now.'
+  } finally {
+    clearingAllMessages.value = false
+    deletingMessageIds.value = []
+  }
+}
+
 const toBase64Attachment = (file) =>
   new Promise((resolve, reject) => {
     const reader = new FileReader()
@@ -591,6 +678,29 @@ watch(
     }
   },
 )
+
+watch(receivedMessages, (newMessages) => {
+  if (!Array.isArray(newMessages)) {
+    receivedMessagesPage.value = 1
+    return
+  }
+
+  const totalPages = Math.ceil(newMessages.length / RECEIVED_MESSAGES_PER_PAGE) || 1
+
+  if (receivedMessagesPage.value > totalPages) {
+    receivedMessagesPage.value = totalPages
+  }
+
+  if (newMessages.length === 0) {
+    receivedMessagesPage.value = 1
+  }
+})
+
+watch(messagesError, (value) => {
+  if (value) {
+    messagesSuccess.value = ''
+  }
+})
 
 watch(counterpartRole, (role) => {
   selectedRecipientIds.value = []
@@ -772,7 +882,21 @@ onBeforeUnmount(() => {
           </section>
 
           <section class="messaging-center__section">
-            <h2 class="messaging-center__section-heading">Messages you received</h2>
+            <div class="messaging-center__section-heading-row">
+              <h2 class="messaging-center__section-heading">Messages you received</h2>
+              <Button
+                v-if="receivedMessages.length > 0"
+                label="Clear all"
+                icon="pi pi-trash"
+                severity="danger"
+                outlined
+                size="small"
+                class="messaging-center__clear-all"
+                :loading="clearingAllMessages"
+                :disabled="clearingAllMessages"
+                @click="handleClearAllMessages"
+              />
+            </div>
 
             <div class="messaging-center__messages" v-if="messagesLoading">
               <Message severity="info">Loading your messages…</Message>
@@ -786,17 +910,70 @@ onBeforeUnmount(() => {
               <Message severity="info">You have not received any messages yet.</Message>
             </div>
 
-            <ul v-else class="messaging-center__message-list">
-              <li v-for="message in receivedMessages" :key="message.id" class="messaging-center__message-item">
-                <div class="messaging-center__message-header">
-                  <span class="messaging-center__message-sender">{{ message.senderName }}</span>
-                  <span v-if="message.sentAt" class="messaging-center__message-date">
-                    {{ message.sentAt.toLocaleString() }}
-                  </span>
-                </div>
-                <p class="messaging-center__message-body">{{ message.body }}</p>
-              </li>
-            </ul>
+            <div v-else>
+              <div
+                v-if="messagesSuccess"
+                class="messaging-center__messages messaging-center__messages--success"
+              >
+                <Message severity="success">{{ messagesSuccess }}</Message>
+              </div>
+
+              <ul class="messaging-center__message-list">
+                <li
+                  v-for="message in paginatedReceivedMessages"
+                  :key="message.id"
+                  class="messaging-center__message-item"
+                >
+                  <div class="messaging-center__message-header">
+                    <div class="messaging-center__message-meta">
+                      <span class="messaging-center__message-sender">{{ message.senderName }}</span>
+                      <span v-if="message.sentAt" class="messaging-center__message-date">
+                        {{ message.sentAt.toLocaleString() }}
+                      </span>
+                    </div>
+                    <div class="messaging-center__message-actions">
+                      <Button
+                        label="Clear"
+                        icon="pi pi-times"
+                        severity="secondary"
+                        text
+                        size="small"
+                        class="messaging-center__clear-message"
+                        :loading="isDeletingMessage(message.id)"
+                        :disabled="isDeletingMessage(message.id) || clearingAllMessages"
+                        @click="handleDeleteMessage(message.id)"
+                      />
+                    </div>
+                  </div>
+                  <p class="messaging-center__message-body">{{ message.body }}</p>
+                </li>
+              </ul>
+
+              <div v-if="totalReceivedMessagesPages > 1" class="messaging-center__pagination">
+                <Button
+                  label="Previous"
+                  icon="pi pi-chevron-left"
+                  severity="secondary"
+                  text
+                  size="small"
+                  :disabled="receivedMessagesPage === 1"
+                  @click="goToPreviousMessagesPage"
+                />
+                <span class="messaging-center__pagination-label">
+                  Page {{ receivedMessagesPage }} of {{ totalReceivedMessagesPages }}
+                </span>
+                <Button
+                  label="Next"
+                  icon-pos="right"
+                  icon="pi pi-chevron-right"
+                  severity="secondary"
+                  text
+                  size="small"
+                  :disabled="receivedMessagesPage === totalReceivedMessagesPages"
+                  @click="goToNextMessagesPage"
+                />
+              </div>
+            </div>
           </section>
         </div>
       </div>
@@ -899,6 +1076,18 @@ onBeforeUnmount(() => {
   font-weight: 600;
 }
 
+.messaging-center__section-heading-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.messaging-center__clear-all {
+  white-space: nowrap;
+}
+
 .messaging-center__subheading {
   margin: 0;
   font-size: 1rem;
@@ -976,6 +1165,10 @@ onBeforeUnmount(() => {
   gap: 0.75rem;
 }
 
+.messaging-center__messages--success {
+  margin-bottom: 0.75rem;
+}
+
 .messaging-center__message-list {
   list-style: none;
   padding: 0;
@@ -1001,15 +1194,45 @@ onBeforeUnmount(() => {
   color: var(--p-surface-600, #52525b);
 }
 
+.messaging-center__message-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
 .messaging-center__message-sender {
   font-weight: 600;
   color: var(--p-surface-900, #18181b);
+}
+
+.messaging-center__message-date {
+  font-size: 0.8125rem;
+  color: var(--p-surface-600, #52525b);
+}
+
+.messaging-center__message-actions {
+  display: flex;
+  align-items: center;
 }
 
 .messaging-center__message-body {
   margin: 0;
   white-space: pre-wrap;
   line-height: 1.5;
+}
+
+.messaging-center__pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  flex-wrap: wrap;
+}
+
+.messaging-center__pagination-label {
+  font-size: 0.875rem;
+  color: var(--p-surface-600, #52525b);
 }
 
 .messaging-center__hint {
