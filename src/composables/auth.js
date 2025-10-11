@@ -2,13 +2,81 @@ import { computed, reactive } from 'vue'
 import { onAuthStateChanged, signOut } from 'firebase/auth'
 import { auth as firebaseAuth } from '../firebase'
 
+const STORAGE_KEY = 'health-charity-app:authUser'
+const STORAGE_DURATION_MS = 7 * 24 * 60 * 60 * 1000
+
+function isBrowser() {
+  return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'
+}
+
+function clearPersistedUser() {
+  if (!isBrowser()) return
+
+  try {
+    window.localStorage.removeItem(STORAGE_KEY)
+  } catch (error) {
+    console.warn('Failed to clear persisted auth state', error)
+  }
+}
+
+function persistUser(user) {
+  if (!isBrowser()) return
+
+  if (!user) {
+    clearPersistedUser()
+    return
+  }
+
+  try {
+    const payload = {
+      user,
+      expiresAt: Date.now() + STORAGE_DURATION_MS,
+    }
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload))
+  } catch (error) {
+    console.warn('Failed to persist auth state', error)
+  }
+}
+
+function loadPersistedUser() {
+  if (!isBrowser()) return null
+
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY)
+    if (!raw) return null
+
+    const parsed = JSON.parse(raw)
+    if (!parsed || typeof parsed !== 'object') {
+      clearPersistedUser()
+      return null
+    }
+
+    const { user, expiresAt } = parsed
+    if (typeof expiresAt !== 'number' || expiresAt < Date.now()) {
+      clearPersistedUser()
+      return null
+    }
+
+    if (!user || typeof user !== 'object') {
+      clearPersistedUser()
+      return null
+    }
+
+    return user
+  } catch (error) {
+    console.warn('Failed to load persisted auth state', error)
+    clearPersistedUser()
+    return null
+  }
+}
+
 const credentials = {
   username: 'admin',
   password: '12345',
 }
 
 const state = reactive({
-  user: null,
+  user: loadPersistedUser(),
 })
 
 const isAuthenticated = computed(() => state.user !== null)
@@ -21,6 +89,7 @@ const authReady = new Promise((resolve) => {
 function login(username, password) {
   if (username === credentials.username && password === credentials.password) {
     state.user = { username }
+    persistUser(state.user)
     return true
   }
   return false
@@ -45,6 +114,7 @@ function deriveUsernameFromFirebase(user) {
 function loginWithFirebase(user) {
   if (!user) {
     state.user = null
+    persistUser(state.user)
     return
   }
 
@@ -54,6 +124,7 @@ function loginWithFirebase(user) {
     uid: user.uid,
     provider: 'firebase',
   }
+  persistUser(state.user)
 }
 
 function logout() {
@@ -61,6 +132,7 @@ function logout() {
     signOut(firebaseAuth).catch(() => {})
   }
   state.user = null
+  persistUser(state.user)
 }
 
 if (firebaseAuth) {
@@ -69,6 +141,7 @@ if (firebaseAuth) {
       loginWithFirebase(user)
     } else if (state.user?.provider === 'firebase') {
       state.user = null
+      persistUser(state.user)
     }
 
     resolveAuthReady?.()
