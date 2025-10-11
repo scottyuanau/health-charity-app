@@ -384,6 +384,8 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+  --donation-history-header-bg: rgba(220, 53, 69, 0.05);
+  --donation-history-row-alt-bg: rgba(248, 249, 250, 0.8);
 }
 
 .donation-history__message {
@@ -411,10 +413,18 @@ onBeforeUnmount(() => {
 
 .donation-history :deep(.p-datatable .p-datatable-thead > tr > th) {
   font-weight: 600;
-  background-color: rgba(220, 53, 69, 0.05);
+  background-color: var(--donation-history-header-bg);
+  color: inherit;
 }
 
 .donation-history :deep(.p-datatable .p-datatable-tbody > tr:nth-child(even)) {
-  background-color: rgba(248, 249, 250, 0.8);
+  background-color: var(--donation-history-row-alt-bg);
+}
+
+@media (prefers-color-scheme: dark) {
+  .donation-history {
+    --donation-history-header-bg: rgba(248, 113, 113, 0.14);
+    --donation-history-row-alt-bg: rgba(148, 163, 184, 0.14);
+  }
 }
 </style>
