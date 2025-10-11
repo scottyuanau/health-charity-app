@@ -6,6 +6,7 @@ import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
 import SelectButton from 'primevue/selectbutton'
 import InputNumber from 'primevue/inputnumber'
+import InputSwitch from 'primevue/inputswitch'
 import Message from 'primevue/message'
 import {
   addDoc,
@@ -100,6 +101,55 @@ const menuItems = computed(() => {
 
   return items
 })
+
+const themeStorageKey = 'app-theme'
+const isDarkMode = ref(false)
+const useSystemTheme = ref(true)
+let themeMediaQuery = null
+
+const applyThemeClasses = () => {
+  if (typeof document === 'undefined') {
+    return
+  }
+
+  const { body } = document
+  body.classList.toggle('app-dark', isDarkMode.value)
+  const shouldForceLight = !isDarkMode.value && !useSystemTheme.value
+  body.classList.toggle('app-light', shouldForceLight)
+  if (!shouldForceLight) {
+    body.classList.remove('app-light')
+  }
+}
+
+const persistThemePreference = () => {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  if (useSystemTheme.value) {
+    window.localStorage.removeItem(themeStorageKey)
+  } else {
+    window.localStorage.setItem(themeStorageKey, isDarkMode.value ? 'dark' : 'light')
+  }
+}
+
+const syncThemeState = () => {
+  applyThemeClasses()
+  persistThemePreference()
+}
+
+const handleSystemThemeChange = (event) => {
+  if (!useSystemTheme.value) {
+    return
+  }
+
+  isDarkMode.value = event.matches
+}
+
+const handleThemeToggle = (value) => {
+  useSystemTheme.value = false
+  isDarkMode.value = value
+}
 
 const donationDialogVisible = ref(false)
 const donationSaving = ref(false)
@@ -197,6 +247,34 @@ const formatNotificationTimestamp = (date) => {
 
   return notificationTimeFormatter.format(date)
 }
+
+watch(isDarkMode, syncThemeState)
+watch(useSystemTheme, syncThemeState)
+
+onMounted(() => {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  const storedPreference = window.localStorage.getItem(themeStorageKey)
+  if (storedPreference === 'dark' || storedPreference === 'light') {
+    useSystemTheme.value = false
+    isDarkMode.value = storedPreference === 'dark'
+  } else {
+    themeMediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
+    useSystemTheme.value = true
+    isDarkMode.value = themeMediaQuery.matches
+    themeMediaQuery.addEventListener('change', handleSystemThemeChange)
+  }
+
+  applyThemeClasses()
+})
+
+onUnmounted(() => {
+  if (themeMediaQuery) {
+    themeMediaQuery.removeEventListener('change', handleSystemThemeChange)
+  }
+})
 
 const donorRoles = computed(() => {
   const roles = userProfile.value?.roles
@@ -620,6 +698,18 @@ watch(
         </template>
         <template #end>
           <div class="navbar-actions">
+            <div class="navbar-theme-toggle">
+              <span
+                class="navbar-theme-toggle__icon pi"
+                :class="isDarkMode ? 'pi-moon' : 'pi-sun'"
+                aria-hidden="true"
+              ></span>
+              <InputSwitch
+                :modelValue="isDarkMode"
+                @update:modelValue="handleThemeToggle"
+                :aria-label="isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'"
+              />
+            </div>
             <div
               v-if="isAuthenticated"
               ref="notificationsContainerRef"
@@ -894,6 +984,32 @@ watch(
   gap: 1rem;
 }
 
+.navbar-theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--app-muted-text, var(--bs-secondary-color));
+}
+
+.navbar-theme-toggle__icon {
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+.navbar-theme-toggle :deep(.p-inputswitch) {
+  width: 2.75rem;
+  height: 1.5rem;
+}
+
+.navbar-theme-toggle :deep(.p-inputswitch-slider) {
+  border-radius: 1.5rem;
+}
+
+.navbar-theme-toggle :deep(.p-inputswitch-handle) {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
 .navbar-notifications {
   position: relative;
 }
@@ -1119,33 +1235,34 @@ watch(
   transform: translateY(-10%);
 }
 
-@media (prefers-color-scheme: dark) {
-  .navbar-notifications__badge {
-    box-shadow: 0 0 0 1px rgba(148, 163, 184, 0.35);
-  }
-
-  .navbar-notifications__notification:hover,
-  .navbar-notifications__notification:focus-visible {
-    background: rgba(248, 113, 113, 0.18);
-  }
-
-  .navbar-notifications__notification--unread {
-    background: rgba(248, 113, 113, 0.16);
-    box-shadow: inset 0 0 0 1px rgba(248, 113, 113, 0.28);
-  }
-
-  .navbar-notifications__sender {
-    color: #f8fafc;
-  }
-
-  .navbar-notifications__message {
-    color: rgba(226, 232, 240, 0.78);
-  }
-
-  .navbar-notifications__timestamp {
-    color: rgba(148, 163, 184, 0.82);
-  }
+:global(body.app-dark) :deep(.navbar-notifications__badge) {
+  box-shadow: 0 0 0 1px rgba(148, 163, 184, 0.35);
 }
+
+:global(body.app-dark)
+  :deep(.navbar-notifications__notification:hover),
+:global(body.app-dark)
+  :deep(.navbar-notifications__notification:focus-visible) {
+  background: rgba(248, 113, 113, 0.18);
+}
+
+:global(body.app-dark) :deep(.navbar-notifications__notification--unread) {
+  background: rgba(248, 113, 113, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(248, 113, 113, 0.28);
+}
+
+:global(body.app-dark) :deep(.navbar-notifications__sender) {
+  color: #f8fafc;
+}
+
+:global(body.app-dark) :deep(.navbar-notifications__message) {
+  color: rgba(226, 232, 240, 0.78);
+}
+
+:global(body.app-dark) :deep(.navbar-notifications__timestamp) {
+  color: rgba(148, 163, 184, 0.82);
+}
+
 
 .donate-now-button {
   font-weight: 700;

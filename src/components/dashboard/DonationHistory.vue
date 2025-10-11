@@ -421,10 +421,8 @@ onBeforeUnmount(() => {
   background-color: var(--donation-history-row-alt-bg);
 }
 
-@media (prefers-color-scheme: dark) {
-  .donation-history {
-    --donation-history-header-bg: rgba(248, 113, 113, 0.14);
-    --donation-history-row-alt-bg: rgba(148, 163, 184, 0.14);
-  }
+:global(body.app-dark) :deep(.donation-history) {
+  --donation-history-header-bg: rgba(248, 113, 113, 0.14);
+  --donation-history-row-alt-bg: rgba(148, 163, 184, 0.14);
 }
 </style>

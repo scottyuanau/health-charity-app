@@ -24,6 +24,32 @@ body {
   background-color: var(--app-background);
 }
 
+body.app-light {
+  color-scheme: light;
+  --app-background: #f8f9fa;
+  --app-surface: #ffffff;
+  --app-nav-bg: rgba(255, 255, 255, 0.92);
+  --app-text-color: #212529;
+  --app-border-color: rgba(0, 0, 0, 0.08);
+  --app-card-background: #ffffff;
+  --app-card-shadow: 0 0.5rem 1.5rem rgba(15, 23, 42, 0.08);
+  --app-muted-text: #6c757d;
+  --app-subtle-surface: #f4f4f5;
+}
+
+body.app-dark {
+  color-scheme: dark;
+  --app-background: #0f172a;
+  --app-surface: #111827;
+  --app-nav-bg: rgba(15, 23, 42, 0.95);
+  --app-text-color: #e2e8f0;
+  --app-border-color: rgba(148, 163, 184, 0.24);
+  --app-card-background: #1f2937;
+  --app-card-shadow: 0 20px 45px rgba(2, 6, 23, 0.65);
+  --app-muted-text: #94a3b8;
+  --app-subtle-surface: rgba(148, 163, 184, 0.12);
+}
+
 main {
   background-color: var(--app-surface);
   color: inherit;
@@ -47,7 +73,8 @@ main {
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
+  body:not(.app-light) {
+    color-scheme: dark;
     --app-background: #0f172a;
     --app-surface: #111827;
     --app-nav-bg: rgba(15, 23, 42, 0.95);
@@ -59,7 +86,7 @@ main {
     --app-subtle-surface: rgba(148, 163, 184, 0.12);
   }
 
-  main {
+  body:not(.app-light) main {
     color: var(--app-text-color);
   }
 }
