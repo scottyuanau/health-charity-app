@@ -1018,7 +1018,7 @@ watch(
   position: relative;
   border: none;
   background: transparent;
-  color: var(--bs-body-color);
+  color: var(--app-text-color, var(--bs-body-color));
   cursor: pointer;
   padding: 0.25rem;
   display: inline-flex;
@@ -1237,6 +1237,25 @@ watch(
 
 :global(body.app-dark) :deep(.navbar-notifications__badge) {
   box-shadow: 0 0 0 1px rgba(148, 163, 184, 0.35);
+}
+
+:global(body.app-dark) :deep(.navbar-notifications__button) {
+  color: var(--app-text-color);
+}
+
+:global(body.app-dark) :deep(.navbar-notifications__icon) {
+  color: inherit;
+}
+
+:global(body.app-dark) :deep(.navbar .navbar-brand),
+:global(body.app-dark) :deep(.navbar .p-menubar-button),
+:global(body.app-dark) :deep(.navbar .p-menuitem-link) {
+  color: var(--app-text-color) !important;
+}
+
+:global(body.app-dark) :deep(.navbar .p-menuitem-link .p-menuitem-text),
+:global(body.app-dark) :deep(.navbar .p-menuitem-link .p-menuitem-icon) {
+  color: inherit !important;
 }
 
 :global(body.app-dark)
