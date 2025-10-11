@@ -48,6 +48,16 @@ const emailSending = ref(false)
 const emailError = ref('')
 const emailSuccess = ref('')
 
+const sendEmailEndpoint =
+  typeof import.meta.env.VITE_SENDGRID_ENDPOINT === 'string' && import.meta.env.VITE_SENDGRID_ENDPOINT.trim()
+    ? import.meta.env.VITE_SENDGRID_ENDPOINT.trim()
+    : '/api/send-email'
+
+const defaultSenderEmail =
+  typeof import.meta.env.VITE_SENDGRID_FROM_EMAIL === 'string'
+    ? import.meta.env.VITE_SENDGRID_FROM_EMAIL.trim()
+    : ''
+
 const firebaseUser = computed(() => {
   const user = state.user
   if (user?.provider === 'firebase' && user.uid) {
@@ -320,9 +330,13 @@ const handleSendEmail = async () => {
     return
   }
 
-  const apiKey = import.meta.env.VITE_SENDGRID_API_KEY
-  if (!apiKey) {
-    emailError.value = 'SendGrid is not configured. Please add your API key.'
+  const configuredSenderEmail =
+    (defaultSenderEmail && defaultSenderEmail) ||
+    (typeof state.user?.email === 'string' && state.user.email.trim())
+
+  if (!configuredSenderEmail) {
+    emailError.value =
+      'We do not have a sender email configured. Please contact support to configure email sending.'
     emailSuccess.value = ''
     return
   }
@@ -336,38 +350,38 @@ const handleSendEmail = async () => {
       emailAttachments.value.map((file) => toBase64Attachment(file)),
     )
 
-    const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
+    const response = await fetch(sendEmailEndpoint, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        personalizations: [
-          {
-            to: [{ email: selectedRecipientEmail.value, name: selectedRecipient.value.name }],
-            subject: emailSubject.value.trim() || 'Message from Health Charity App',
-          },
-        ],
+        to: {
+          email: selectedRecipientEmail.value,
+          name: selectedRecipient.value.name,
+        },
         from: {
-          email:
-            typeof state.user?.email === 'string' && state.user.email
-              ? state.user.email
-              : 'no-reply@health-charity-app.local',
+          email: configuredSenderEmail,
           name: senderDisplayName.value,
         },
-        content: [
-          {
-            type: 'text/plain',
-            value: emailBody.value.trim(),
-          },
-        ],
+        subject: emailSubject.value.trim() || 'Message from Health Charity App',
+        text: emailBody.value.trim(),
+        html: emailBody.value.trim().replace(/\n/g, '<br />'),
         attachments: attachments.filter((attachment) => attachment.content),
       }),
     })
 
     if (!response.ok) {
-      throw new Error(`SendGrid responded with status ${response.status}`)
+      let errorMessage = 'Failed to send email.'
+      try {
+        const errorPayload = await response.json()
+        if (errorPayload?.error) {
+          errorMessage = errorPayload.error
+        }
+      } catch (error) {
+        // Ignore JSON parsing errors – we'll fall back to the default message
+      }
+      throw new Error(errorMessage)
     }
 
     emailSuccess.value = 'Email sent successfully.'
@@ -376,7 +390,8 @@ const handleSendEmail = async () => {
     emailAttachments.value = []
   } catch (error) {
     console.error('Failed to send email', error)
-    emailError.value = 'We could not send your email. Please try again.'
+    emailError.value =
+      error instanceof Error && error.message ? error.message : 'We could not send your email. Please try again.'
   } finally {
     emailSending.value = false
   }
