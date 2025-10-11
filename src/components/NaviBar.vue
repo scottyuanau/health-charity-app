@@ -145,6 +145,12 @@ const notificationBadgeLabel = computed(() => {
   return String(unreadNotificationCount.value)
 })
 
+const notificationAriaLabel = computed(() =>
+  hasUnreadNotifications.value
+    ? `Notifications (${notificationBadgeLabel.value})`
+    : 'Notifications',
+)
+
 const notificationTimeFormatter = new Intl.DateTimeFormat('en-GB', {
   dateStyle: 'medium',
   timeStyle: 'short',
@@ -523,15 +529,19 @@ watch(
                 @click.stop="toggleNotificationsDropdown"
                 :aria-expanded="notificationsDropdownVisible ? 'true' : 'false'"
                 aria-haspopup="true"
-                aria-label="Notifications"
+                :aria-label="notificationAriaLabel"
               >
-                <span class="pi pi-bell" aria-hidden="true"></span>
-                <span
-                  v-if="hasUnreadNotifications"
-                  class="navbar-notifications__badge"
-                >
-                  {{ notificationBadgeLabel }}
+                <span class="navbar-notifications__icon-wrapper" aria-hidden="true">
+                  <span class="pi pi-bell navbar-notifications__icon"></span>
+                  <span
+                    v-if="hasUnreadNotifications"
+                    class="navbar-notifications__badge"
+                  >
+                    {{ notificationBadgeLabel }}
+                  </span>
                 </span>
+
+
               </button>
 
               <transition name="navbar-notifications__transition">
@@ -748,11 +758,22 @@ watch(
   color: var(--bs-body-color);
   cursor: pointer;
   padding: 0.25rem;
-  font-size: 1.35rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   transition: color 0.2s ease;
+}
+
+.navbar-notifications__icon-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.navbar-notifications__icon {
+  font-size: 1.35rem;
+  line-height: 1;
 }
 
 .navbar-notifications__button:hover,
@@ -763,18 +784,24 @@ watch(
 
 .navbar-notifications__badge {
   position: absolute;
-  top: 0;
+  top: auto;
   right: 0;
-  transform: translate(45%, -45%);
+  bottom: 0;
+  transform: translate(40%, 40%);
   background: #dc3545;
   color: #fff;
   border-radius: 999px;
-  padding: 0 0.4rem;
-  font-size: 0.7rem;
+  padding: 0 0.35rem;
+  font-size: 0.65rem;
   font-weight: 700;
-  line-height: 1.4;
-  min-width: 1.2rem;
-  text-align: center;
+  line-height: 1;
+  min-width: 1.1rem;
+  height: 1.1rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.05);
 }
 
 .navbar-notifications__panel {
