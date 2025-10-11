@@ -398,9 +398,9 @@ const initialiseMap = async () => {
     mapInstance.value = new google.Map(mapElementRef.value, {
       center: { lat: 51.5074, lng: -0.1278 },
       zoom: 11,
-      mapTypeControl: false,
-      fullscreenControl: false,
-      streetViewControl: false,
+      mapTypeControl: true,
+      fullscreenControl: true,
+      streetViewControl: true,
     })
 
     initialiseDirections()
@@ -1011,4 +1011,4 @@ onUnmounted(() => {
     justify-content: center;
   }
 }
-</style> 
+</style>
