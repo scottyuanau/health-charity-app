@@ -57,10 +57,6 @@ const menuItems = computed(() => {
       command: () => router.push({ name: 'home' }),
     },
     {
-      label: 'About',
-      command: () => router.push({ name: 'about' }),
-    },
-    {
       label: 'Carers',
       command: () => router.push({ name: 'carers' }),
     },
