@@ -169,11 +169,26 @@ const showBookingsTab = computed(
 }
 
 .dashboard__tabs :deep(.p-tabview-nav) {
-  flex-wrap: wrap;
+  background-color: transparent;
+  border-color: var(--app-border-color);
 }
 
-.dashboard__tabs :deep(.p-tabview-nav li) {
-  flex: 1 1 auto;
-  text-align: center;
+.dashboard__tabs :deep(.p-tabview-nav-link) {
+  background-color: var(--app-surface);
+  color: var(--app-text-color);
+  border-color: transparent;
+}
+
+.dashboard__tabs :deep(.p-tabview-nav li.p-highlight .p-tabview-nav-link) {
+  background-color: var(--app-card-background);
+  color: var(--app-text-color);
+}
+
+.dashboard__tabs :deep(.p-tabview-panels) {
+  background-color: var(--app-card-background);
+  color: var(--app-text-color);
+  border: 1px solid var(--app-border-color);
+  border-radius: 1rem;
+  box-shadow: var(--app-card-shadow);
 }
 </style>
