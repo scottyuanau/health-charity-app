@@ -251,6 +251,7 @@ import Password from 'primevue/password'
 import DatePicker from 'primevue/datepicker'
 import MultiSelect from 'primevue/multiselect'
 import Message from 'primevue/message'
+import { useToast } from 'primevue/usetoast'
 
 import { auth, db, missingKeys } from '../firebase'
 import { useAuth } from '../composables/auth'
@@ -258,6 +259,7 @@ import { useAuth } from '../composables/auth'
 const router = useRouter()
 const route = useRoute()
 const { loginWithFirebase } = useAuth()
+const toast = useToast()
 
 const mode = ref('login')
 const loading = ref(false)
@@ -307,6 +309,15 @@ const toggleLabel = computed(() =>
     ? 'Already have an account? Sign in here.'
     : 'Need an account? Register here.',
 )
+
+const notifyLoginSuccess = (detail = 'You are now logged in.') => {
+  toast.add({
+    severity: 'success',
+    summary: 'Login successful',
+    detail,
+    life: 4000,
+  })
+}
 
 const redirectPath = computed(() => (typeof route.query.redirect === 'string' ? route.query.redirect : '/'))
 
@@ -577,6 +588,7 @@ const handleLogin = async (values, { resetForm }) => {
     const credential = await signInWithEmailAndPassword(auth, values.email.trim(), values.password)
 
     loginWithFirebase(credential.user)
+    notifyLoginSuccess()
 
     successMessage.value = 'Signed in successfully. Redirecting to your destination...'
 
@@ -617,6 +629,7 @@ const handleRegister = async (values, { resetForm }) => {
     })
 
     loginWithFirebase(credential.user)
+    notifyLoginSuccess('Your account has been created and you are now logged in.')
 
     successMessage.value = 'Account created successfully. Redirecting to your destination...'
 
