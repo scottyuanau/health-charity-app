@@ -139,7 +139,7 @@ const handleSubscribe = async () => {
     </section>
     <section class="newsletter">
       <div class="newsletter__content">
-        <h2 class="newsletter__title">Stay informed about our mission</h2>
+        <h2 class="newsletter__title">Stay informed</h2>
         <p class="newsletter__description">
           Subscribe to our newsletter for inspiring stories, program updates, and ways you can continue making a
           difference.
@@ -325,6 +325,7 @@ const handleSubscribe = async () => {
 .newsletter__input {
   flex: 1 1 260px;
   min-height: 3.25rem;
+  max-height:3.25rem;
   padding-inline: 1rem;
   font-size: 1rem;
 }
@@ -365,4 +366,4 @@ const handleSubscribe = async () => {
     width: 100%;
   }
 }
-</style> 
+</style>
