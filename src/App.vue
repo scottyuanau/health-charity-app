@@ -1,11 +1,13 @@
 <script setup>
 import { RouterView } from 'vue-router'
+import Toast from 'primevue/toast'
 import NaviBar from '@/components/NaviBar.vue'
 import AppFooter from '@/components/AppFooter.vue'
 
 </script>
 
 <template>
+  <Toast position="top-right" />
   <header>
     <NaviBar />
   </header>
